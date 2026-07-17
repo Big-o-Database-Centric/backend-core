@@ -8,6 +8,11 @@ jest.mock('mssql', () => ({
   NVarChar: Symbol('NVarChar'),
 }));
 
+interface MockConfigService {
+  get: jest.Mock<string | undefined, [key: string, defaultValue?: string | undefined]>;
+  getOrThrow: jest.Mock<string, [key: string]>;
+}
+
 describe('SqlService', () => {
   let service: SqlService;
   let mockRequest: { input: jest.Mock; execute: jest.Mock };
@@ -50,7 +55,7 @@ describe('SqlService', () => {
 });
 
 describe('SqlService.createPool', () => {
-  let mockConfigService: Partial<ConfigService>;
+  let mockConfigService: MockConfigService;
   let mockPoolInstance: { connect: jest.Mock };
 
   beforeEach(() => {
@@ -83,15 +88,15 @@ describe('SqlService.createPool', () => {
     });
 
     mockConfigService = {
-      getOrThrow: getOrThrowMock as any,
-      get: getMock as any,
+      getOrThrow: getOrThrowMock as jest.Mock<string, [key: string]>,
+      get: getMock as jest.Mock<string | undefined, [key: string, defaultValue?: string | undefined]>,
     };
 
     (sql.ConnectionPool as unknown as jest.Mock).mockReturnValue(mockPoolInstance);
   });
 
   it('constructs pool with correct options from config with defaults', async () => {
-    await SqlService.createPool(mockConfigService as ConfigService);
+    await SqlService.createPool(mockConfigService as unknown as ConfigService);
 
     expect(sql.ConnectionPool as unknown as jest.Mock).toHaveBeenCalledWith({
       server: 'localhost',
@@ -117,9 +122,9 @@ describe('SqlService.createPool', () => {
       };
       return values[key] ?? defaultValue;
     });
-    (mockConfigService.get as any) = getMock;
+    mockConfigService.get = getMock;
 
-    await SqlService.createPool(mockConfigService as ConfigService);
+    await SqlService.createPool(mockConfigService as unknown as ConfigService);
 
     expect(sql.ConnectionPool as unknown as jest.Mock).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -137,9 +142,9 @@ describe('SqlService.createPool', () => {
       };
       return values[key] ?? defaultValue;
     });
-    (mockConfigService.get as any) = getMock;
+    mockConfigService.get = getMock;
 
-    await SqlService.createPool(mockConfigService as ConfigService);
+    await SqlService.createPool(mockConfigService as unknown as ConfigService);
 
     expect(sql.ConnectionPool as unknown as jest.Mock).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -159,9 +164,9 @@ describe('SqlService.createPool', () => {
       };
       return values[key] ?? defaultValue;
     });
-    (mockConfigService.get as any) = getMock;
+    mockConfigService.get = getMock;
 
-    await SqlService.createPool(mockConfigService as ConfigService);
+    await SqlService.createPool(mockConfigService as unknown as ConfigService);
 
     expect(sql.ConnectionPool as unknown as jest.Mock).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -181,9 +186,9 @@ describe('SqlService.createPool', () => {
       };
       return values[key] ?? defaultValue;
     });
-    (mockConfigService.get as any) = getMock;
+    mockConfigService.get = getMock;
 
-    await SqlService.createPool(mockConfigService as ConfigService);
+    await SqlService.createPool(mockConfigService as unknown as ConfigService);
 
     expect(sql.ConnectionPool as unknown as jest.Mock).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -203,9 +208,9 @@ describe('SqlService.createPool', () => {
       };
       return values[key] ?? defaultValue;
     });
-    (mockConfigService.get as any) = getMock;
+    mockConfigService.get = getMock;
 
-    await SqlService.createPool(mockConfigService as ConfigService);
+    await SqlService.createPool(mockConfigService as unknown as ConfigService);
 
     expect(sql.ConnectionPool as unknown as jest.Mock).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -220,7 +225,7 @@ describe('SqlService.createPool', () => {
     const expectedConnection = { some: 'connection' };
     mockPoolInstance.connect.mockResolvedValue(expectedConnection);
 
-    const result = await SqlService.createPool(mockConfigService as ConfigService);
+    const result = await SqlService.createPool(mockConfigService as unknown as ConfigService);
 
     expect(result).toEqual(expectedConnection);
   });
