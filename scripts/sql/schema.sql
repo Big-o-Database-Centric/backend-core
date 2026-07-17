@@ -56,10 +56,20 @@ BEGIN
     DECLARE @Salt UNIQUEIDENTIFIER = NEWID();
     DECLARE @Hash VARBINARY(32) = HASHBYTES('SHA2_256', CONVERT(NVARCHAR(36), @Salt) + @Password);
 
-    INSERT INTO dbo.Users (Name, Email, PasswordSalt, PasswordHash)
-    VALUES (@Name, @Email, @Salt, @Hash);
+    BEGIN TRY
+        INSERT INTO dbo.Users (Name, Email, PasswordSalt, PasswordHash)
+        VALUES (@Name, @Email, @Salt, @Hash);
 
-    SELECT CAST(1 AS BIT) AS Success, 'Registered' AS Message, CAST(SCOPE_IDENTITY() AS INT) AS UserId;
+        SELECT CAST(1 AS BIT) AS Success, 'Registered' AS Message, CAST(SCOPE_IDENTITY() AS INT) AS UserId;
+    END TRY
+    BEGIN CATCH
+        IF ERROR_NUMBER() IN (2627, 2601)
+        BEGIN
+            SELECT CAST(0 AS BIT) AS Success, 'Email already registered' AS Message, CAST(NULL AS INT) AS UserId;
+            RETURN;
+        END
+        THROW;
+    END CATCH
 END
 GO
 
