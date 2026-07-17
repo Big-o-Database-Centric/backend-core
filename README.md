@@ -1,134 +1,85 @@
-# Backend Core - Database-Centric Platform API
+# Backend Core — Database-Centric Platform API
 
-Plataforma de hosting de bases de datos para desarrolladores. **Backend tipo API** con arquitectura Database-Centric: toda la lógica de negocio reside en SQL Server (Stored Procedures), el backend solo media comunicación HTTP.
+Backend NestJS puro para la plataforma de hosting de bases de datos. Arquitectura
+database-centric: toda la lógica de negocio vive en Stored Procedures de SQL Server: el
+backend solo ejecuta el SP correspondiente y retransmite su recordset.
 
 ## Stack
 
-- **Framework**: Next.js 16 (App Router, TypeScript)
-- **Auth**: NextAuth.js v5 (OAuth2: Google + GitHub)
-- **Database**: Microsoft SQL Server (lógica de negocio vía SPs)
-- **Driver**: `mssql` + `zod` para validación
+- NestJS 10 (Express)
+- `mssql` — único driver de acceso a datos, sin ORM de dominio
+- `class-validator` — solo valida forma/tipo de los inputs, nunca reglas de negocio
 
-## Arquitectura
-
-```
-┌──────────────┐     ┌──────────────┐     ┌──────────────┐
-│   Client     │────▶│  Next.js API │────▶│  SQL Server  │
-│  (Frontend)  │     │  (Middleware)│     │  (Stored Procs)│
-└──────────────┘     └──────────────┘     └──────────────┘
-```
-
-**Regla de Oro**: El backend NO implementa reglas de negocio. Solo:
-1. Recibe petición HTTP
-2. Invoca SP con parámetros
-3. Retorna respuesta estructurada
-
-## Configuración
-
-### 1. Clonar y dependencias
+## Setup
 
 ```bash
-git clone <repo>
-cd backend-core
 npm install
+cp .env.example .env
+# editar .env con los datos reales del VPS / SQL Server
 ```
 
-### 2. Variables de entorno
+Ejecutar `scripts/sql/schema.sql` una vez contra la base de datos objetivo — crea las tablas
+(`Users`, `Sessions`, `UserDatabases`) y los 5 stored procedures.
 
 ```bash
-cp .env.example .env.local
+npm run start:dev   # desarrollo
+npm run build        # build de producción
+npm run start:prod    # servir dist/main.js
+npm test              # suite de unit tests (Jest)
 ```
-
-Editar `.env.local` con:
-- `AUTH_SECRET` (generar con `openssl rand -base64 32`)
-- `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`
-- `AUTH_GITHUB_ID`, `AUTH_GITHUB_SECRET`
-- `SQL_SERVER_*` (conexión a VPS)
-
-### 3. Base de datos
-
-Ejecutar `scripts/sql/auth.sql` en SQL Server para crear tablas y SPs.
-
-### 4. Desarrollo
-
-```bash
-npm run dev
-```
-
-API disponible en `http://localhost:3000`
 
 ## Endpoints
 
-| Método | Ruta | Descripción |
-|--------|------|-------------|
-| GET | `/` | API info |
-| GET | `/api/health` | Health check |
-| GET | `/api/auth/providers` | Lista OAuth providers |
-| GET/POST | `/api/auth/*` | NextAuth handlers |
+| Método | Ruta | Body | SP |
+|---|---|---|---|
+| POST | `/api/auth/register` | `{ name, email, password }` | `sp_Register` |
+| POST | `/api/auth/login` | `{ email, password }` | `sp_Login` |
+| POST | `/api/auth/logout` | — | (solo limpia la cookie, sin SP) |
+| GET | `/api/stats` | — (público) | `sp_GetPlatformStats` |
+| GET | `/api/me` | — (cookie `session_token`) | `sp_GetUserInfo` |
+| GET | `/api/my-databases` | — (cookie `session_token`) | `sp_GetUserDatabases` |
 
-## Estructura
+## Sesión
 
-```
-src/
-├── app/
-│   ├── api/
-│   │   ├── auth/[...nextauth]/route.ts
-│   │   ├── auth/providers/route.ts
-│   │   └── health/route.ts
-│   ├── layout.tsx
-│   └── page.tsx
-├── config/
-│   └── env.ts
-├── db/
-│   └── sqlserver.ts
-├── domain/
-│   ├── entities.ts
-│   └── contracts/
-│       ├── IUserRepository.ts
-│       └── ISessionRepository.ts
-├── repositories/
-│   ├── SqlServerUserRepository.ts
-│   ├── SqlServerSessionRepository.ts
-│   └── SqlServerAuditRepository.ts
-└── lib/
-    └── auth/
-        ├── config.ts
-        ├── providers.ts
-        ├── callbacks.ts
-        └── repository.factory.ts
-```
+`sp_Login` exitoso setea una cookie httpOnly `session_token`. El frontend debe llamar con
+`fetch(url, { credentials: 'include' })` para que el navegador la mande de vuelta en cada
+request a `/api/me` y `/api/my-databases`.
 
-## Scripts
+## Reglas de arquitectura
+
+- Ningún SQL se concatena — `SqlService.execute` es el único punto de contacto con `mssql`
+  y siempre usa `.input(name, type, value)`.
+- El backend no valida reglas de negocio (email duplicado, longitud de password, etc.) —
+  esas decisiones las toma el SP y viajan en el recordset (columnas `Success`/`Message`).
+- Sin guards de Nest ni roles: el token de sesión (o `null` si no hay cookie) siempre se
+  pasa al SP; es el SP quien decide si es válido.
+
+## Docker
 
 ```bash
-npm run dev      # Desarrollo
-npm run build    # Build para producción
-npm run lint     # ESLint
-npm start        # Servidor de producción
+docker build -t backend-core .
+docker run --env-file .env -p 3000:3000 backend-core
 ```
 
-## Handoff
+Verificar el build de la imagen en el VPS/CI antes del primer deploy — no se pudo probar
+`docker build` en el entorno de desarrollo donde se escribió este backend.
 
-Ver `HANDOFF.md` para instrucciones de integración OAuth con tu compañero.
+## Smoke test manual
 
-Ver `scripts/sql/auth.sql` para SPs de base de datos.
+Con el servidor corriendo y `scripts/sql/schema.sql` ya aplicado:
 
-## Seguridad
+```bash
+curl -X POST http://localhost:3000/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Ada","email":"ada@example.com","password":"secret123"}'
 
-- ✅ OAuth2 con Google/GitHub
-- ✅ JWT firmado
-- ✅ Parámetros en SPs (no SQL concatenación)
-- ✅ HTTPS obligatorio en producción
-- ⚠️ Rate limiting pendiente (implementar en gateway)
+curl -X POST http://localhost:3000/api/auth/login -i \
+  -H "Content-Type: application/json" \
+  -d '{"email":"ada@example.com","password":"secret123"}'
+# copiar el valor de Set-Cookie: session_token=...
 
-## Próximos pasos
+curl http://localhost:3000/api/stats
 
-1. Integrar OAuth providers (companion task)
-2. Implementar SPs de provisioning MySQL
-3. Dashboard endpoints
-4. Rate limiting por IP/usuario
-5. SSL/TLS en VPS
-
-## Licencia
-
-MIT
+curl http://localhost:3000/api/me --cookie "session_token=<valor copiado>"
+curl http://localhost:3000/api/my-databases --cookie "session_token=<valor copiado>"
+```
