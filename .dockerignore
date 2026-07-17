@@ -1,5 +1,10 @@
 node_modules
 dist
-.env
-.env.local
-*.log
+coverage
+.git
+.github
+*.md
+.env*
+npm-debug.log*
+Dockerfile
+.dockerignore
