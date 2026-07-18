@@ -41,7 +41,7 @@ jobs:
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
+          key: ${{ secrets.SSH_KEY }}
           script: |
             echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
             docker pull ${{ env.IMAGE_NAME }}:latest
@@ -65,7 +65,7 @@ jobs:
             docker image prune -f
 
 # Secrets requeridos (nivel repo u organización):
-#   VPS_HOST, VPS_USER, VPS_SSH_KEY → acceso SSH al VPS
+#   VPS_HOST, VPS_USER, SSH_KEY → acceso SSH al VPS
 #   SQL_SERVER      → host/SERVIDOR SQL Server
 #   SQL_DATABASE   → nombre de la base de datos
 #   SQL_USER       → usuario de la base de datos
