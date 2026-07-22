@@ -1,0 +1,84 @@
+name: Deploy Backend Core
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Calcular nombre de imagen en minúsculas
+        id: image
+        run: echo "IMAGE_NAME=ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_ENV"
+
+      - name: Login a GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build y push de la imagen
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.IMAGE_NAME }}:latest
+            ${{ env.IMAGE_NAME }}:${{ github.sha }}
+
+      - name: Deploy al VPS Big-O
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          script: |
+            echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            docker pull ${{ env.IMAGE_NAME }}:latest
+            docker stop backend-core || true
+            docker rm backend-core || true
+            docker run -d \
+              --name backend-core \
+              --restart unless-stopped \
+              -p 3000:3000 \
+              -e NODE_ENV=production \
+              -e CORS_ORIGIN="${{ vars.CORS_ORIGIN || 'https://big-o.andrescortes.dev' }}" \
+              -e AUTH_SECRET="${{ secrets.AUTH_SECRET }}" \
+              -e AUTH_GOOGLE_ID="${{ secrets.AUTH_GOOGLE_ID }}" \
+              -e AUTH_GOOGLE_SECRET="${{ secrets.AUTH_GOOGLE_SECRET }}" \
+              -e AUTH_GITHUB_ID="${{ secrets.AUTH_GITHUB_ID }}" \
+              -e AUTH_GITHUB_SECRET="${{ secrets.AUTH_GITHUB_SECRET }}" \
+              -e SQL_SERVER="${{ secrets.SQL_SERVER_HOST }}" \
+              -e SQL_PORT="${{ secrets.SQL_SERVER_PORT }}" \
+              -e SQL_USER="${{ secrets.SQL_SERVER_USER }}" \
+              -e SQL_PASSWORD="${{ secrets.SQL_SERVER_PASSWORD }}" \
+              -e SQL_DATABASE="${{ secrets.SQL_SERVER_DATABASE }}" \
+              ${{ env.IMAGE_NAME }}:latest
+            docker image prune -f
+
+# Secrets requeridos (nivel repo u organización):
+#   VPS_HOST, VPS_USER, SSH_KEY → acceso SSH al VPS
+#   AUTH_SECRET                    → openssl rand -base64 32
+#   AUTH_GOOGLE_ID / AUTH_GOOGLE_SECRET
+#   AUTH_GITHUB_ID / AUTH_GITHUB_SECRET
+#   SQL_SERVER_HOST / SQL_SERVER_PORT / SQL_SERVER_USER
+#   SQL_SERVER_PASSWORD / SQL_SERVER_DATABASE
+#
+# Nota sobre el mapeo de nombres: los secrets conservan el nombre SQL_SERVER_*
+# heredado de la etapa Next.js, pero el backend NestJS lee SQL_SERVER,
+# SQL_PORT, SQL_USER, SQL_PASSWORD y SQL_DATABASE (ver src/database/sql.service.ts).
+# Los cuatro primeros se leen con getOrThrow: si el nombre no coincide, el
+# contenedor no arranca.
+#
+# Las variables AUTH_* todavía no las consume nadie; quedan preparadas para la
+# implementación de OAuth (ver docs/superpowers/specs/2026-07-22-oauth-google-github-design.md).
