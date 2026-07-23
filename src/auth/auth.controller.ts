@@ -1,5 +1,5 @@
-import { Body, Controller, Post, Res, UnauthorizedException } from '@nestjs/common';
-import type { Response } from 'express';
+import { Body, Controller, Post, Req, Res, UnauthorizedException } from '@nestjs/common';
+import type { Request, Response } from 'express';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
@@ -31,7 +31,9 @@ export class AuthController {
   }
 
   @Post('logout')
-  logout(@Res({ passthrough: true }) res: Response) {
+  async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
+    const token = req.cookies?.session_token ?? null;
+    await this.authService.logout(token);
     res.clearCookie('session_token');
     return { success: true };
   }

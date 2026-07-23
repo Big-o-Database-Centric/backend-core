@@ -12,10 +12,10 @@ function mockResponse() {
 
 describe('AuthController', () => {
   let controller: AuthController;
-  let authService: { register: jest.Mock; login: jest.Mock };
+  let authService: { register: jest.Mock; login: jest.Mock; logout: jest.Mock };
 
   beforeEach(async () => {
-    authService = { register: jest.fn(), login: jest.fn() };
+    authService = { register: jest.fn(), login: jest.fn(), logout: jest.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [AuthController],
@@ -61,11 +61,14 @@ describe('AuthController', () => {
     expect(res.cookie).not.toHaveBeenCalled();
   });
 
-  it('logout clears the cookie', () => {
+  it('logout invalidates the session and clears the cookie', async () => {
+    authService.logout = jest.fn().mockResolvedValue(undefined);
     const res = mockResponse();
+    const req = { cookies: { session_token: 'tok-123' } } as unknown as import('express').Request;
 
-    const result = controller.logout(res);
+    const result = await controller.logout(req, res);
 
+    expect(authService.logout).toHaveBeenCalledWith('tok-123');
     expect(res.clearCookie).toHaveBeenCalledWith('session_token');
     expect(result).toEqual({ success: true });
   });

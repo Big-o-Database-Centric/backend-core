@@ -48,4 +48,20 @@ describe('AuthService', () => {
     );
     expect(result.SessionToken).toBe('tok');
   });
+
+  it('calls sp_Logout with the session token', async () => {
+    sqlService.execute.mockResolvedValue([{ Success: true }]);
+
+    await service.logout('tok-123');
+
+    expect(sqlService.execute).toHaveBeenCalledWith(
+      'sp_Logout',
+      expect.objectContaining({ SessionToken: expect.objectContaining({ value: 'tok-123' }) }),
+    );
+  });
+
+  it('logout does not call the SP when token is null', async () => {
+    await service.logout(null);
+    expect(sqlService.execute).not.toHaveBeenCalled();
+  });
 });

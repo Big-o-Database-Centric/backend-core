@@ -37,4 +37,11 @@ export class AuthService {
     });
     return row;
   }
+
+  async logout(token: string | null): Promise<void> {
+    if (!token) return;
+    await this.sqlService.execute('sp_Logout', {
+      SessionToken: { type: sql.UniqueIdentifier, value: token },
+    });
+  }
 }
