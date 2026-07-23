@@ -104,7 +104,7 @@ BEGIN
     IF @UserId IS NULL
     BEGIN
         -- 2. Unknown identity requires a verified email to link/create.
-        IF @EmailVerified = 0 OR @Email IS NULL
+        IF ISNULL(@EmailVerified, 0) = 0 OR @Email IS NULL
         BEGIN
             SELECT CAST(0 AS BIT) AS Success, 'Email no verificado por el proveedor' AS Message,
                    CAST(NULL AS INT) AS UserId, CAST(NULL AS UNIQUEIDENTIFIER) AS SessionToken,
@@ -145,6 +145,14 @@ BEGIN
     END
 
     -- 4. Create the session and return the sp_Login-shaped row.
+    IF @UserId IS NULL
+    BEGIN
+        SELECT CAST(0 AS BIT) AS Success, 'No se pudo resolver la cuenta' AS Message,
+               CAST(NULL AS INT) AS UserId, CAST(NULL AS UNIQUEIDENTIFIER) AS SessionToken,
+               CAST(NULL AS NVARCHAR(100)) AS Name, CAST(NULL AS NVARCHAR(256)) AS Email;
+        RETURN;
+    END
+
     SELECT @ResolvedName = Name, @ResolvedEmail = Email FROM dbo.Users WHERE UserId = @UserId;
 
     DECLARE @Token UNIQUEIDENTIFIER = NEWID();

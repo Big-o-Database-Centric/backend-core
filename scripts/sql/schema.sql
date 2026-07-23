@@ -6,6 +6,7 @@
 
 IF OBJECT_ID('dbo.Sessions', 'U') IS NOT NULL DROP TABLE dbo.Sessions;
 IF OBJECT_ID('dbo.UserDatabases', 'U') IS NOT NULL DROP TABLE dbo.UserDatabases;
+IF OBJECT_ID('dbo.UserOAuthAccounts', 'U') IS NOT NULL DROP TABLE dbo.UserOAuthAccounts;
 IF OBJECT_ID('dbo.Users', 'U') IS NOT NULL DROP TABLE dbo.Users;
 GO
 
