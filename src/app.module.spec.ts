@@ -1,4 +1,5 @@
 import { Test } from '@nestjs/testing';
+import { ConfigService } from '@nestjs/config';
 import { AppModule } from './app.module';
 
 describe('AppModule', () => {
@@ -8,6 +9,11 @@ describe('AppModule', () => {
     })
       .overrideProvider('MSSQL_POOL')
       .useValue({ request: () => ({ input: () => {}, execute: async () => ({ recordset: [] }) }) })
+      .overrideProvider(ConfigService)
+      .useValue({
+        get: (key: string) => `test-${key}`,
+        getOrThrow: (key: string) => `test-${key}`,
+      })
       .compile();
 
     expect(moduleRef).toBeDefined();

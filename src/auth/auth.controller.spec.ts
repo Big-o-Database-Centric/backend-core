@@ -12,10 +12,10 @@ function mockResponse() {
 
 describe('AuthController', () => {
   let controller: AuthController;
-  let authService: { register: jest.Mock; login: jest.Mock; logout: jest.Mock };
+  let authService: { register: jest.Mock; login: jest.Mock; logout: jest.Mock; oauthLogin: jest.Mock };
 
   beforeEach(async () => {
-    authService = { register: jest.fn(), login: jest.fn(), logout: jest.fn() };
+    authService = { register: jest.fn(), login: jest.fn(), logout: jest.fn(), oauthLogin: jest.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [AuthController],
@@ -71,5 +71,53 @@ describe('AuthController', () => {
     expect(authService.logout).toHaveBeenCalledWith('tok-123');
     expect(res.clearCookie).toHaveBeenCalledWith('session_token');
     expect(result).toEqual({ success: true });
+  });
+});
+
+function redirectResponse() {
+  return {
+    cookie: jest.fn(),
+    clearCookie: jest.fn(),
+    redirect: jest.fn(),
+  } as unknown as import('express').Response;
+}
+
+describe('AuthController OAuth callback', () => {
+  let controller: AuthController;
+  let authService: { register: jest.Mock; login: jest.Mock; logout: jest.Mock; oauthLogin: jest.Mock };
+
+  beforeEach(async () => {
+    authService = { register: jest.fn(), login: jest.fn(), logout: jest.fn(), oauthLogin: jest.fn() };
+    const module: TestingModule = await Test.createTestingModule({
+      controllers: [AuthController],
+      providers: [{ provide: AuthService, useValue: authService }],
+    }).compile();
+    controller = module.get(AuthController);
+  });
+
+  it('sets the cookie and redirects to the dashboard on success', async () => {
+    authService.oauthLogin.mockResolvedValue({
+      Success: true, Message: 'OK', UserId: 1, SessionToken: 'tok', Name: 'A', Email: 'a@x.com',
+    });
+    const res = redirectResponse();
+    const req = { user: { provider: 'google', providerAccountId: 'g1', email: 'a@x.com', name: 'A', emailVerified: true } } as any;
+
+    await controller.googleCallback(req, res);
+
+    expect(res.cookie).toHaveBeenCalledWith('session_token', 'tok', expect.objectContaining({ httpOnly: true }));
+    expect(res.redirect).toHaveBeenCalledWith('/views/dashboard.html');
+  });
+
+  it('redirects to login with an error when the SP rejects', async () => {
+    authService.oauthLogin.mockResolvedValue({
+      Success: false, Message: 'Email no verificado por el proveedor', UserId: null, SessionToken: null, Name: null, Email: null,
+    });
+    const res = redirectResponse();
+    const req = { user: { provider: 'github', providerAccountId: 'h1', email: null, name: 'A', emailVerified: false } } as any;
+
+    await controller.githubCallback(req, res);
+
+    expect(res.cookie).not.toHaveBeenCalled();
+    expect(res.redirect).toHaveBeenCalledWith('/views/login.html?error=oauth_email_not_verified');
   });
 });
