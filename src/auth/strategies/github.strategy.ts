@@ -42,21 +42,25 @@ export class GitHubStrategy extends PassportStrategy(Strategy, 'github') {
     let email: string | null = null;
     let emailVerified = false;
 
-    const res = await fetch('https://api.github.com/user/emails', {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        Accept: 'application/vnd.github+json',
-        'User-Agent': 'big-o-backend',
-      },
-    });
+    try {
+      const res = await fetch('https://api.github.com/user/emails', {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          Accept: 'application/vnd.github+json',
+          'User-Agent': 'big-o-backend',
+        },
+      });
 
-    if (res.ok) {
-      const emails = (await res.json()) as GitHubEmail[];
-      const primary = emails.find((e) => e.primary) ?? emails[0];
-      if (primary) {
-        email = primary.email;
-        emailVerified = primary.verified === true;
+      if (res.ok) {
+        const emails = (await res.json()) as GitHubEmail[];
+        const primary = emails.find((e) => e.primary);
+        if (primary) {
+          email = primary.email;
+          emailVerified = primary.verified === true;
+        }
       }
+    } catch {
+      // fail-closed: leave email null / emailVerified false
     }
 
     const oauth: OAuthProfile = {

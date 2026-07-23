@@ -60,4 +60,49 @@ describe('GitHubStrategy.validate', () => {
 
     expect(done.mock.calls[0][1].name).toBe('ada');
   });
+
+  it('fails closed when the GitHub email API call rejects', async () => {
+    jest.spyOn(global, 'fetch').mockRejectedValue(new Error('network'));
+    const strategy = new GitHubStrategy(config());
+    const done = jest.fn();
+
+    await strategy.validate('t', 'r', { id: '99', username: 'ada', displayName: 'Ada L' } as any, done);
+
+    const arg = done.mock.calls[0][1];
+    expect(arg.email).toBeNull();
+    expect(arg.emailVerified).toBe(false);
+    expect(arg.providerAccountId).toBe('99');
+    expect(arg.provider).toBe('github');
+    expect(arg.name).toBe('Ada L');
+  });
+
+  it('fails closed when the GitHub email API responds with a non-ok status', async () => {
+    jest.spyOn(global, 'fetch').mockResolvedValue({ ok: false, status: 401 } as Response);
+    const strategy = new GitHubStrategy(config());
+    const done = jest.fn();
+
+    await strategy.validate('t', 'r', { id: '99', username: 'ada', displayName: 'Ada L' } as any, done);
+
+    const arg = done.mock.calls[0][1];
+    expect(arg.email).toBeNull();
+    expect(arg.emailVerified).toBe(false);
+    expect(arg.providerAccountId).toBe('99');
+    expect(arg.provider).toBe('github');
+    expect(arg.name).toBe('Ada L');
+  });
+
+  it('fails closed when no email in the list is marked primary', async () => {
+    jest.spyOn(global, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => [{ email: 'x@x.com', primary: false, verified: true }],
+    } as Response);
+    const strategy = new GitHubStrategy(config());
+    const done = jest.fn();
+
+    await strategy.validate('t', 'r', { id: '99', username: 'ada', displayName: 'Ada L' } as any, done);
+
+    const arg = done.mock.calls[0][1];
+    expect(arg.email).toBeNull();
+    expect(arg.emailVerified).toBe(false);
+  });
 });
