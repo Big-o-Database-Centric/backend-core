@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import * as sql from 'mssql';
 import { SqlService } from '../database/sql.service';
+import { OAuthProfile } from './oauth/oauth-profile.interface';
 
 export interface RegisterResult {
   Success: boolean;
@@ -43,5 +44,16 @@ export class AuthService {
     await this.sqlService.execute('sp_Logout', {
       SessionToken: { type: sql.UniqueIdentifier, value: token },
     });
+  }
+
+  async oauthLogin(profile: OAuthProfile): Promise<LoginResult> {
+    const [row] = await this.sqlService.execute<LoginResult>('sp_OAuthLogin', {
+      Provider: { type: sql.NVarChar, value: profile.provider },
+      ProviderAccountId: { type: sql.NVarChar, value: profile.providerAccountId },
+      Email: { type: sql.NVarChar, value: profile.email },
+      Name: { type: sql.NVarChar, value: profile.name },
+      EmailVerified: { type: sql.Bit, value: profile.emailVerified },
+    });
+    return row;
   }
 }
