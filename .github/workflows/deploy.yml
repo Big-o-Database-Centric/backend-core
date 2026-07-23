@@ -59,27 +59,26 @@ jobs:
               -e AUTH_GOOGLE_SECRET="${{ secrets.AUTH_GOOGLE_SECRET }}" \
               -e AUTH_GITHUB_ID="${{ secrets.AUTH_GITHUB_ID }}" \
               -e AUTH_GITHUB_SECRET="${{ secrets.AUTH_GITHUB_SECRET }}" \
-              -e SQL_SERVER="${{ secrets.SQL_SERVER_HOST }}" \
-              -e SQL_PORT="${{ secrets.SQL_SERVER_PORT }}" \
-              -e SQL_USER="${{ secrets.SQL_SERVER_USER }}" \
-              -e SQL_PASSWORD="${{ secrets.SQL_SERVER_PASSWORD }}" \
-              -e SQL_DATABASE="${{ secrets.SQL_SERVER_DATABASE }}" \
+              -e SQL_SERVER="${{ secrets.SQL_SERVER }}" \
+              -e SQL_PORT="${{ secrets.SQL_PORT }}" \
+              -e SQL_USER="${{ secrets.SQL_USER }}" \
+              -e SQL_PASSWORD="${{ secrets.SQL_PASSWORD }}" \
+              -e SQL_DATABASE="${{ secrets.SQL_DATABASE }}" \
+              -e SQL_SERVER_ENCRYPT="${{ secrets.SQL_SERVER_ENCRYPT }}" \
+              -e SQL_SERVER_TRUST_SERVER_CERT="${{ secrets.SQL_SERVER_TRUST_SERVER_CERT }}" \
               ${{ env.IMAGE_NAME }}:latest
             docker image prune -f
 
 # Secrets requeridos (nivel repo u organización):
 #   VPS_HOST, VPS_USER, SSH_KEY → acceso SSH al VPS
+#   SQL_SERVER, SQL_PORT, SQL_USER, SQL_PASSWORD, SQL_DATABASE → conexión SQL
+#     (SQL_SERVER, SQL_USER, SQL_PASSWORD, SQL_DATABASE se leen con getOrThrow:
+#      si faltan, el contenedor no arranca)
+#   SQL_SERVER_ENCRYPT, SQL_SERVER_TRUST_SERVER_CERT → opcionales (default true/false)
 #   AUTH_SECRET                    → openssl rand -base64 32
-#   AUTH_GOOGLE_ID / AUTH_GOOGLE_SECRET
-#   AUTH_GITHUB_ID / AUTH_GITHUB_SECRET
-#   SQL_SERVER_HOST / SQL_SERVER_PORT / SQL_SERVER_USER
-#   SQL_SERVER_PASSWORD / SQL_SERVER_DATABASE
+#   AUTH_GOOGLE_ID / AUTH_GOOGLE_SECRET → Google Cloud Console (OAuth client)
+#   AUTH_GITHUB_ID / AUTH_GITHUB_SECRET → GitHub OAuth App
 #
-# Nota sobre el mapeo de nombres: los secrets conservan el nombre SQL_SERVER_*
-# heredado de la etapa Next.js, pero el backend NestJS lee SQL_SERVER,
-# SQL_PORT, SQL_USER, SQL_PASSWORD y SQL_DATABASE (ver src/database/sql.service.ts).
-# Los cuatro primeros se leen con getOrThrow: si el nombre no coincide, el
-# contenedor no arranca.
-#
-# Las variables AUTH_* todavía no las consume nadie; quedan preparadas para la
-# implementación de OAuth (ver docs/superpowers/specs/2026-07-22-oauth-google-github-design.md).
+# Los cinco AUTH_* los leen las estrategias OAuth con getOrThrow al construirse:
+# si falta cualquiera, TODO el backend falla al arrancar (no solo OAuth).
+# PUBLIC_BASE_URL se pasa como variable (vars) con default al dominio de prod.
