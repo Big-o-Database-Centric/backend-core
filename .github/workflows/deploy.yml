@@ -54,6 +54,7 @@ jobs:
               -e NODE_ENV=production \
               -e CORS_ORIGIN="${{ vars.CORS_ORIGIN || 'https://big-o.andrescortes.dev' }}" \
               -e AUTH_SECRET="${{ secrets.AUTH_SECRET }}" \
+              -e PUBLIC_BASE_URL="${{ vars.PUBLIC_BASE_URL || 'https://big-o.andrescortes.dev' }}" \
               -e AUTH_GOOGLE_ID="${{ secrets.AUTH_GOOGLE_ID }}" \
               -e AUTH_GOOGLE_SECRET="${{ secrets.AUTH_GOOGLE_SECRET }}" \
               -e AUTH_GITHUB_ID="${{ secrets.AUTH_GITHUB_ID }}" \
