@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import * as sql from 'mssql';
 import { SqlService } from '../database/sql.service';
 import { ManagedDatabaseRepository } from './managed-database.repository';
@@ -6,13 +7,14 @@ import { ManagedDatabaseRecord, ManagedEngine, ReservationResult } from './manag
 
 @Injectable()
 export class SqlServerManagedDatabaseRepository implements ManagedDatabaseRepository {
-  constructor(private readonly sql: SqlService) {}
+  constructor(private readonly sql: SqlService, private readonly config: ConfigService) {}
 
   async reserve(sessionToken: string | null, databaseName: string, engine: ManagedEngine): Promise<ReservationResult> {
     const [row] = await this.sql.execute<ReservationResult>('sp_ReserveManagedDatabase', {
       SessionToken: { type: sql.UniqueIdentifier, value: sessionToken },
       DatabaseName: { type: sql.NVarChar(100), value: databaseName },
       Engine: { type: sql.NVarChar(50), value: engine },
+      MaxTotal: { type: sql.Int, value: this.maxTotal() },
     });
     return row;
   }
@@ -39,5 +41,10 @@ export class SqlServerManagedDatabaseRepository implements ManagedDatabaseReposi
     return this.sql.execute<ManagedDatabaseRecord>('sp_GetManagedDatabases', {
       SessionToken: { type: sql.UniqueIdentifier, value: sessionToken },
     });
+  }
+
+  private maxTotal(): number {
+    const configured = Number(this.config.get<string>('MANAGED_DATABASE_MAX_TOTAL', '2'));
+    return Number.isSafeInteger(configured) && configured > 0 ? configured : 2;
   }
 }

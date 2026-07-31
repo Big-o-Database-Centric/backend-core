@@ -13,6 +13,16 @@ describe('managed database SQL migration', () => {
     expect(migration).toContain('sp_ReserveManagedDatabase');
   });
 
+  it('accepts a global capacity limit inside the reservation procedure', () => {
+    const migration = readFileSync(
+      resolve(__dirname, '../../scripts/sql/003-managed-databases.sql'),
+      'utf8',
+    );
+
+    expect(migration).toContain('@MaxTotal INT');
+    expect(migration).toContain('Maximum managed database capacity reached');
+  });
+
   it('guards every managed-database column independently for fresh schemas and upgrades', () => {
     const migration = readFileSync(
       resolve(__dirname, '../../scripts/sql/003-managed-databases.sql'),

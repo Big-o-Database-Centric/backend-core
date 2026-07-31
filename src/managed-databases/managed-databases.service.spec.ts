@@ -5,7 +5,8 @@ describe('ManagedDatabasesService', () => {
   const repository = { reserve: jest.fn(), activate: jest.fn(), fail: jest.fn(), list: jest.fn() };
   const provisioner = { engine: 'mysql' as const, provision: jest.fn(), destroy: jest.fn() };
   const cipher = { encrypt: jest.fn().mockReturnValue(Buffer.from('encrypted')) };
-  const service = new ManagedDatabasesService(repository as any, [provisioner], cipher as any);
+  const config = { get: jest.fn((key: string, fallback?: string) => key === 'MANAGED_DATABASE_ENABLED_ENGINES' ? 'mysql,postgresql' : fallback) };
+  const service = new (ManagedDatabasesService as any)(repository, [provisioner], cipher, config);
 
   beforeEach(() => jest.clearAllMocks());
 
@@ -18,6 +19,13 @@ describe('ManagedDatabasesService', () => {
   it('rejects an absent session', async () => {
     repository.reserve.mockResolvedValue({ Success: false, Message: 'Unauthorized' });
     await expect(service.create(null, { engine: 'mysql', databaseName: 'shop' })).rejects.toThrow(UnauthorizedException);
+  });
+
+  it('rejects an engine not enabled for the MVP before reserving', async () => {
+    await expect(service.create('token', { engine: 'mongodb', databaseName: 'shop' }))
+      .rejects.toThrow(ConflictException);
+
+    expect(repository.reserve).not.toHaveBeenCalled();
   });
 
   it('uses the logged-in email as the database username', async () => {

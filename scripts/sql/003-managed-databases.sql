@@ -44,7 +44,8 @@ GO
 CREATE OR ALTER PROCEDURE dbo.sp_ReserveManagedDatabase
     @SessionToken UNIQUEIDENTIFIER,
     @DatabaseName NVARCHAR(100),
-    @Engine NVARCHAR(50)
+    @Engine NVARCHAR(50),
+    @MaxTotal INT
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -64,9 +65,19 @@ BEGIN
     END
 
     BEGIN TRANSACTION;
-    SET @LockResource = N'managed-database-user-' + CONVERT(NVARCHAR(20), @UserId);
+    SET @LockResource = N'managed-database-capacity';
     EXEC sp_getapplock @Resource = @LockResource,
                         @LockMode = 'Exclusive', @LockOwner = 'Transaction', @LockTimeout = 5000;
+
+    IF @MaxTotal < 1 OR (SELECT COUNT(*) FROM dbo.UserDatabases WITH (UPDLOCK, HOLDLOCK)
+        WHERE State IN ('pending', 'active')) >= @MaxTotal
+    BEGIN
+        ROLLBACK TRANSACTION;
+        SELECT CAST(0 AS BIT) AS Success, 'Maximum managed database capacity reached' AS Message,
+               CAST(NULL AS INT) AS DatabaseId, @UserId AS UserId, @Email AS Email,
+               CAST(NULL AS UNIQUEIDENTIFIER) AS InstanceId;
+        RETURN;
+    END
 
     IF (SELECT COUNT(*) FROM dbo.UserDatabases WITH (UPDLOCK, HOLDLOCK)
         WHERE UserId = @UserId AND State IN ('pending', 'active')) >= 3

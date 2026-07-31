@@ -1,4 +1,5 @@
 import { BadRequestException, ConflictException, Inject, Injectable, InternalServerErrorException, UnauthorizedException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { randomBytes } from 'node:crypto';
 import { CredentialCipherService } from './credential-cipher.service';
 import { DATABASE_PROVISIONERS, DatabaseProvisioner } from './database-provisioner';
@@ -14,11 +15,20 @@ export class ManagedDatabasesService {
     @Inject(MANAGED_DATABASE_REPOSITORY) private readonly repository: ManagedDatabaseRepository,
     @Inject(DATABASE_PROVISIONERS) provisioners: DatabaseProvisioner[],
     private readonly cipher: CredentialCipherService,
+    private readonly config: ConfigService,
   ) {
     this.byEngine = new Map(provisioners.map((provisioner) => [provisioner.engine, provisioner]));
   }
 
   async create(sessionToken: string | null, dto: CreateManagedDatabaseDto) {
+    const enabledEngines = new Set(
+      this.config.get<string>('MANAGED_DATABASE_ENABLED_ENGINES', 'mysql,postgresql')
+        .split(',')
+        .map((engine) => engine.trim())
+        .filter(Boolean),
+    );
+    if (!enabledEngines.has(dto.engine)) throw new ConflictException('Database engine is unavailable');
+
     const reservation = await this.repository.reserve(sessionToken, dto.databaseName, dto.engine);
     if (!reservation?.Success) {
       if (reservation?.Message === 'Unauthorized') throw new UnauthorizedException();
