@@ -66,6 +66,7 @@ jobs:
               -e SQL_DATABASE="${{ secrets.SQL_DATABASE }}" \
               -e SQL_SERVER_ENCRYPT="${{ secrets.SQL_SERVER_ENCRYPT }}" \
               -e SQL_SERVER_TRUST_SERVER_CERT="${{ secrets.SQL_SERVER_TRUST_SERVER_CERT }}" \
+              -e DATABASE_CREDENTIALS_KEY="${{ secrets.DATABASE_CREDENTIALS_KEY }}" \
               ${{ env.IMAGE_NAME }}:latest
             docker image prune -f
 
