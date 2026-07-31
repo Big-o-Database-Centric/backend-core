@@ -11,7 +11,9 @@ export class PostgresqlProvisioner extends BaseDockerProvisioner {
   protected readonly port = 5432;
   constructor(docker: DockerRunner, config: ConfigService) { super(docker, config); }
   async provision(input: ProvisioningInput) {
-    await this.start(input, [`POSTGRES_DB=${input.databaseName}`, `POSTGRES_USER=${input.username}`, `POSTGRES_PASSWORD=${input.password}`], '/var/lib/postgresql/data');
-    return this.connection(input);
+    const port = await this.start(input, [`POSTGRES_DB=${input.databaseName}`, `POSTGRES_USER=${input.username}`, `POSTGRES_PASSWORD=${input.password}`], '/var/lib/postgresql/data');
+    await this.docker.waitForCommand(this.containerName(input.instanceId), ['pg_isready', '-h', '127.0.0.1', '-U', input.username, '-d', input.databaseName]);
+    await this.limitUserData(input.instanceId);
+    return this.connection(input, port);
   }
 }

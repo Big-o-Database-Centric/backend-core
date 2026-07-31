@@ -3,9 +3,10 @@ services:
     image: big-o-backend-core:latest
     environment:
       MANAGED_DATABASE_DATA_ROOT: /srv/big-o/instances
+      MANAGED_DATABASE_HOST: db.example.com
+      MANAGED_DATABASE_QUOTA_HELPER_IMAGE: big-o-managed-quota-helper:latest
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - /srv/big-o/instances:/srv/big-o/instances
     networks:
       - big-o-private
 

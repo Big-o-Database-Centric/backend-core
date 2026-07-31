@@ -15,6 +15,7 @@ WORKDIR /app
 ENV NODE_ENV=production
 COPY package*.json ./
 RUN npm ci --omit=dev
+RUN apk add --no-cache docker-cli
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/scripts ./scripts
 

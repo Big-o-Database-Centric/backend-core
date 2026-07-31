@@ -1,0 +1,6 @@
+FROM alpine:3.20
+
+RUN apk add --no-cache bash coreutils util-linux xfsprogs
+COPY infra/managed-databases/prepare-quotas.sh /usr/local/bin/prepare-quotas
+
+ENTRYPOINT ["/usr/local/bin/prepare-quotas"]

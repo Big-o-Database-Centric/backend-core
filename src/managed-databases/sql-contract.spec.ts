@@ -12,4 +12,15 @@ describe('managed database SQL migration', () => {
     expect(migration).toContain('>= 3');
     expect(migration).toContain('sp_ReserveManagedDatabase');
   });
+
+  it('guards every managed-database column independently for fresh schemas and upgrades', () => {
+    const migration = readFileSync(
+      resolve(__dirname, '../../scripts/sql/003-managed-databases.sql'),
+      'utf8',
+    );
+
+    for (const column of ['InstanceId', 'HostName', 'Port', 'DatabaseUser', 'EncryptedPassword', 'QuotaBytes', 'State', 'FailureReason', 'ActivatedAt', 'DeactivatedAt']) {
+      expect(migration).toContain(`COL_LENGTH('dbo.UserDatabases', '${column}') IS NULL`);
+    }
+  });
 });

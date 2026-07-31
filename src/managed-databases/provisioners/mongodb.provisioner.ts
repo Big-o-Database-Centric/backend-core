@@ -12,9 +12,11 @@ export class MongodbProvisioner extends BaseDockerProvisioner {
   constructor(docker: DockerRunner, config: ConfigService) { super(docker, config); }
   async provision(input: ProvisioningInput) {
     const rootPassword = this.rootPassword();
-    await this.start(input, [`MONGO_INITDB_ROOT_USERNAME=root`, `MONGO_INITDB_ROOT_PASSWORD=${rootPassword}`], '/data/db');
+    const port = await this.start(input, [`MONGO_INITDB_ROOT_USERNAME=root`, `MONGO_INITDB_ROOT_PASSWORD=${rootPassword}`], '/data/db');
+    await this.docker.waitForCommand(this.containerName(input.instanceId), ['mongosh', '--quiet', '--username', 'root', '--password', rootPassword, '--authenticationDatabase', 'admin', '--eval', 'db.runCommand({ping:1})']);
     const script = `db.getSiblingDB(${JSON.stringify(input.databaseName)}).createUser({user:${JSON.stringify(input.username)},pwd:${JSON.stringify(input.password)},roles:[{role:'readWrite',db:${JSON.stringify(input.databaseName)}}]})`;
     await this.docker.run(['exec', this.containerName(input.instanceId), 'mongosh', '--quiet', '--username', 'root', '--password', rootPassword, '--authenticationDatabase', 'admin', '--eval', script]);
-    return this.connection(input);
+    await this.limitUserData(input.instanceId);
+    return this.connection(input, port);
   }
 }

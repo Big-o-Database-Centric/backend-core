@@ -11,7 +11,9 @@ export class MysqlProvisioner extends BaseDockerProvisioner {
   protected readonly port = 3306;
   constructor(docker: DockerRunner, config: ConfigService) { super(docker, config); }
   async provision(input: ProvisioningInput) {
-    await this.start(input, [`MYSQL_ROOT_PASSWORD=${this.rootPassword()}`, `MYSQL_DATABASE=${input.databaseName}`, `MYSQL_USER=${input.username}`, `MYSQL_PASSWORD=${input.password}`], '/var/lib/mysql');
-    return this.connection(input);
+    const port = await this.start(input, [`MYSQL_ROOT_PASSWORD=${this.rootPassword()}`, `MYSQL_DATABASE=${input.databaseName}`, `MYSQL_USER=${input.username}`, `MYSQL_PASSWORD=${input.password}`], '/var/lib/mysql');
+    await this.docker.waitForCommand(this.containerName(input.instanceId), ['mysqladmin', 'ping', '-h', '127.0.0.1', `-u${input.username}`, `-p${input.password}`]);
+    await this.limitUserData(input.instanceId);
+    return this.connection(input, port);
   }
 }

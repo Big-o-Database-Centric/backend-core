@@ -2,18 +2,43 @@
 -- Run once after schema.sql. It does not remove existing users or databases.
 
 IF COL_LENGTH('dbo.UserDatabases', 'InstanceId') IS NULL
-BEGIN
     ALTER TABLE dbo.UserDatabases ADD InstanceId UNIQUEIDENTIFIER NULL;
+GO
+
+IF COL_LENGTH('dbo.UserDatabases', 'HostName') IS NULL
     ALTER TABLE dbo.UserDatabases ADD HostName NVARCHAR(255) NULL;
+GO
+
+IF COL_LENGTH('dbo.UserDatabases', 'Port') IS NULL
     ALTER TABLE dbo.UserDatabases ADD Port INT NULL;
+GO
+
+IF COL_LENGTH('dbo.UserDatabases', 'DatabaseUser') IS NULL
     ALTER TABLE dbo.UserDatabases ADD DatabaseUser NVARCHAR(128) NULL;
+GO
+
+IF COL_LENGTH('dbo.UserDatabases', 'EncryptedPassword') IS NULL
     ALTER TABLE dbo.UserDatabases ADD EncryptedPassword VARBINARY(MAX) NULL;
+GO
+
+IF COL_LENGTH('dbo.UserDatabases', 'QuotaBytes') IS NULL
     ALTER TABLE dbo.UserDatabases ADD QuotaBytes BIGINT NOT NULL CONSTRAINT DF_UserDatabases_QuotaBytes DEFAULT 20971520;
+GO
+
+IF COL_LENGTH('dbo.UserDatabases', 'State') IS NULL
     ALTER TABLE dbo.UserDatabases ADD State NVARCHAR(20) NOT NULL CONSTRAINT DF_UserDatabases_State DEFAULT 'active';
+GO
+
+IF COL_LENGTH('dbo.UserDatabases', 'FailureReason') IS NULL
     ALTER TABLE dbo.UserDatabases ADD FailureReason NVARCHAR(250) NULL;
+GO
+
+IF COL_LENGTH('dbo.UserDatabases', 'ActivatedAt') IS NULL
     ALTER TABLE dbo.UserDatabases ADD ActivatedAt DATETIME2 NULL;
+GO
+
+IF COL_LENGTH('dbo.UserDatabases', 'DeactivatedAt') IS NULL
     ALTER TABLE dbo.UserDatabases ADD DeactivatedAt DATETIME2 NULL;
-END
 GO
 
 CREATE OR ALTER PROCEDURE dbo.sp_ReserveManagedDatabase

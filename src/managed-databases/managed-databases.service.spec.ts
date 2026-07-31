@@ -1,4 +1,4 @@
-import { ConflictException, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, ConflictException, UnauthorizedException } from '@nestjs/common';
 import { ManagedDatabasesService } from './managed-databases.service';
 
 describe('ManagedDatabasesService', () => {
@@ -28,5 +28,26 @@ describe('ManagedDatabasesService', () => {
     await service.create('token', { engine: 'mysql', databaseName: 'shop' });
 
     expect(provisioner.provision).toHaveBeenCalledWith(expect.objectContaining({ username: 'ada@example.com' }));
+    expect(provisioner.provision.mock.calls[0][0].password).toMatch(/^Aa1![A-Za-z0-9_-]+$/);
+  });
+
+  it('fails the reservation before provisioning when the exact email exceeds MySQL user limits', async () => {
+    const email = `${'a'.repeat(24)}@example.test`;
+    repository.reserve.mockResolvedValue({ Success: true, DatabaseId: 7, InstanceId: 'instance-7', Email: email });
+
+    await expect(service.create('token', { engine: 'mysql', databaseName: 'shop' })).rejects.toThrow(BadRequestException);
+
+    expect(provisioner.provision).not.toHaveBeenCalled();
+    expect(repository.fail).toHaveBeenCalledWith(7, 'Email is too long for a database username');
+  });
+
+  it('removes a partially created engine when provisioning fails', async () => {
+    repository.reserve.mockResolvedValue({ Success: true, DatabaseId: 7, InstanceId: 'instance-7', Email: 'ada@example.com' });
+    provisioner.provision.mockRejectedValue(new Error('engine startup failed'));
+
+    await expect(service.create('token', { engine: 'mysql', databaseName: 'shop' })).rejects.toThrow('Database provisioning failed');
+
+    expect(provisioner.destroy).toHaveBeenCalledWith('instance-7');
+    expect(repository.fail).toHaveBeenCalledWith(7, 'Provisioning failed');
   });
 });

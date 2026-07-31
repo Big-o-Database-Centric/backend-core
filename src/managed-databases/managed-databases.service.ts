@@ -1,4 +1,4 @@
-import { ConflictException, Inject, Injectable, InternalServerErrorException, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Inject, Injectable, InternalServerErrorException, UnauthorizedException } from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
 import { CredentialCipherService } from './credential-cipher.service';
 import { DATABASE_PROVISIONERS, DatabaseProvisioner } from './database-provisioner';
@@ -31,8 +31,13 @@ export class ManagedDatabasesService {
       throw new InternalServerErrorException('Database engine is unavailable');
     }
 
+    if (reservation.Email.length > 32) {
+      await this.repository.fail(reservation.DatabaseId, 'Email is too long for a database username');
+      throw new BadRequestException('Email is too long to use as a database username');
+    }
+
     const username = reservation.Email;
-    const password = randomBytes(24).toString('base64url');
+    const password = `Aa1!${randomBytes(24).toString('base64url')}`;
     try {
       const connection = await provisioner.provision({
         instanceId: reservation.InstanceId,
@@ -42,11 +47,11 @@ export class ManagedDatabasesService {
       });
       const activated = await this.repository.activate(reservation.DatabaseId, connection, this.cipher.encrypt(password));
       if (!activated) {
-        await provisioner.destroy(reservation.InstanceId);
         throw new Error('Reservation was not active');
       }
       return { databaseId: reservation.DatabaseId, databaseName: dto.databaseName, engine: dto.engine, ...connection, password, quotaBytes: 20971520 };
     } catch (error) {
+      await Promise.resolve(provisioner.destroy(reservation.InstanceId)).catch(() => undefined);
       await this.repository.fail(reservation.DatabaseId, 'Provisioning failed');
       throw new InternalServerErrorException('Database provisioning failed');
     }
