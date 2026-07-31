@@ -23,7 +23,7 @@ CREATE OR ALTER PROCEDURE dbo.sp_ReserveManagedDatabase
 AS
 BEGIN
     SET NOCOUNT ON;
-    DECLARE @UserId INT, @Email NVARCHAR(256), @DatabaseId INT;
+    DECLARE @UserId INT, @Email NVARCHAR(256), @DatabaseId INT, @LockResource NVARCHAR(255);
 
     SELECT @UserId = s.UserId, @Email = u.Email
     FROM dbo.Sessions s
@@ -39,7 +39,8 @@ BEGIN
     END
 
     BEGIN TRANSACTION;
-    EXEC sp_getapplock @Resource = CONCAT('managed-database-user-', @UserId),
+    SET @LockResource = N'managed-database-user-' + CONVERT(NVARCHAR(20), @UserId);
+    EXEC sp_getapplock @Resource = @LockResource,
                         @LockMode = 'Exclusive', @LockOwner = 'Transaction', @LockTimeout = 5000;
 
     IF (SELECT COUNT(*) FROM dbo.UserDatabases WITH (UPDLOCK, HOLDLOCK)
