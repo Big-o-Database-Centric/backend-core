@@ -1,6 +1,6 @@
 FROM alpine:3.20
 
-RUN apk add --no-cache bash coreutils util-linux xfsprogs
+RUN apk add --no-cache bash coreutils util-linux xfsprogs xfsprogs-extra
 COPY infra/managed-databases/prepare-quotas.sh /usr/local/bin/prepare-quotas
 RUN chmod +x /usr/local/bin/prepare-quotas
 

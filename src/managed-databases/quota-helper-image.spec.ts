@@ -7,4 +7,10 @@ describe('managed database quota helper image', () => {
 
     expect(dockerfile).toContain('RUN chmod +x /usr/local/bin/prepare-quotas');
   });
+
+  it('installs the Alpine package that provides xfs_quota', () => {
+    const dockerfile = readFileSync(resolve(__dirname, '../../infra/managed-databases/Dockerfile.quota-helper'), 'utf8');
+
+    expect(dockerfile).toContain('xfsprogs-extra');
+  });
 });

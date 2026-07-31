@@ -49,6 +49,16 @@ ensure_mapping() {
   fi
 }
 
+remove_mapping() {
+  local file="$1"
+  local expected="$2"
+  local temp
+  temp="$(mktemp)"
+  grep -F -x -v "$expected" "$file" > "$temp" || true
+  cat "$temp" > "$file"
+  rm -f "$temp"
+}
+
 prepare_project() {
   mkdir -p "$instance_path"
   if [[ -z "$project_id" ]]; then
@@ -73,8 +83,8 @@ cleanup_project() {
   xfs_quota -x -c "limit -p bhard=0 ${project_name}" "$mount_point" || true
   xfs_quota -x -c "project -C ${project_name}" "$mount_point" || true
   rm -rf -- "$instance_path"
-  sed -i "\\|^${project_id}:${instance_path}$|d" /etc/projects
-  sed -i "\\|^${project_name}:${project_id}$|d" /etc/projid
+  remove_mapping /etc/projects "${project_id}:${instance_path}"
+  remove_mapping /etc/projid "${project_name}:${project_id}"
 }
 
 case "$operation" in

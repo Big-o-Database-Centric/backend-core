@@ -29,4 +29,14 @@ describe('managed database quota helper', () => {
     expect(script).toContain('ensure_mapping /etc/projects "${project_id}:${instance_path}"');
     expect(script).toContain('project id is already assigned');
   });
+
+  it('updates bind-mounted project mapping files without renaming their mount point', () => {
+    const script = readFileSync(
+      resolve(__dirname, '../../infra/managed-databases/prepare-quotas.sh'),
+      'utf8',
+    );
+
+    expect(script).toContain('cat "$temp" > "$file"');
+    expect(script).not.toContain('sed -i');
+  });
 });
