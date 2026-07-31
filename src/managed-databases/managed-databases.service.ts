@@ -21,13 +21,7 @@ export class ManagedDatabasesService {
   }
 
   async create(sessionToken: string | null, dto: CreateManagedDatabaseDto) {
-    const enabledEngines = new Set(
-      this.config.get<string>('MANAGED_DATABASE_ENABLED_ENGINES', 'mysql,postgresql')
-        .split(',')
-        .map((engine) => engine.trim())
-        .filter(Boolean),
-    );
-    if (!enabledEngines.has(dto.engine)) throw new ConflictException('Database engine is unavailable');
+    if (!this.enabledEngines().includes(dto.engine)) throw new ConflictException('Database engine is unavailable');
 
     const reservation = await this.repository.reserve(sessionToken, dto.databaseName, dto.engine);
     if (!reservation?.Success) {
@@ -71,5 +65,17 @@ export class ManagedDatabasesService {
     const records = await this.repository.list(sessionToken);
     if (records.length === 1 && (records[0] as any).Success === false) throw new UnauthorizedException();
     return records;
+  }
+
+  capabilities() {
+    return { engines: this.enabledEngines() };
+  }
+
+  private enabledEngines(): ManagedEngine[] {
+    const supported: ManagedEngine[] = ['mysql', 'postgresql', 'mongodb', 'sqlserver'];
+    const configured = this.config.get<string>('MANAGED_DATABASE_ENABLED_ENGINES', 'mysql,postgresql')
+      .split(',')
+      .map((engine) => engine.trim());
+    return supported.filter((engine) => configured.includes(engine));
   }
 }
