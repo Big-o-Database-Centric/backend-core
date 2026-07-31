@@ -68,7 +68,7 @@ export class ManagedDatabasesService {
   }
 
   capabilities() {
-    return { engines: this.enabledEngines() };
+    return { engines: this.enabledEngines(), maxPerUser: 3 };
   }
 
   private enabledEngines(): ManagedEngine[] {

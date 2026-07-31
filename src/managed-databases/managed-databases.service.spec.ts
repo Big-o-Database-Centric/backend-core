@@ -28,6 +28,10 @@ describe('ManagedDatabasesService', () => {
     expect(repository.reserve).not.toHaveBeenCalled();
   });
 
+  it('reports the user-facing limit with the enabled engines', () => {
+    expect(service.capabilities()).toEqual({ engines: ['mysql', 'postgresql'], maxPerUser: 3 });
+  });
+
   it('uses the logged-in email as the database username', async () => {
     repository.reserve.mockResolvedValue({ Success: true, DatabaseId: 7, InstanceId: 'instance-7', Email: 'ada@example.com' });
     provisioner.provision.mockResolvedValue({ host: 'mysql', port: 3306, username: 'ada@example.com' });

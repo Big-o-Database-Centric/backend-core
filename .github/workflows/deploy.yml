@@ -68,7 +68,7 @@ jobs:
               -e MANAGED_DATABASE_DATA_ROOT="${{ vars.MANAGED_DATABASE_DATA_ROOT || '/srv/big-o/instances' }}" \
               -e MANAGED_DATABASE_HOST="${{ vars.MANAGED_DATABASE_HOST }}" \
               -e MANAGED_DATABASE_ENABLED_ENGINES="${{ vars.MANAGED_DATABASE_ENABLED_ENGINES || 'mysql,postgresql' }}" \
-              -e MANAGED_DATABASE_MAX_TOTAL="${{ vars.MANAGED_DATABASE_MAX_TOTAL || '2' }}" \
+              -e MANAGED_DATABASE_MAX_TOTAL="${{ vars.MANAGED_DATABASE_MAX_TOTAL || '4' }}" \
               -e MANAGED_DATABASE_QUOTA_HELPER_IMAGE="${{ env.IMAGE_NAME }}:quota-helper" \
               -e PUBLIC_BASE_URL="${{ vars.PUBLIC_BASE_URL || 'https://big-o.andrescortes.dev' }}" \
               -e AUTH_GOOGLE_ID="${{ secrets.AUTH_GOOGLE_ID }}" \

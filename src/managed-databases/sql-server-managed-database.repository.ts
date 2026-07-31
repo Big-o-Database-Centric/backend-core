@@ -44,7 +44,7 @@ export class SqlServerManagedDatabaseRepository implements ManagedDatabaseReposi
   }
 
   private maxTotal(): number {
-    const configured = Number(this.config.get<string>('MANAGED_DATABASE_MAX_TOTAL', '2'));
-    return Number.isSafeInteger(configured) && configured > 0 ? configured : 2;
+    const configured = Number(this.config.get<string>('MANAGED_DATABASE_MAX_TOTAL', '4'));
+    return Number.isSafeInteger(configured) && configured > 0 ? configured : 4;
   }
 }
