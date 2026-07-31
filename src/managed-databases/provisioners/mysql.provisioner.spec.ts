@@ -43,6 +43,25 @@ describe('MysqlProvisioner', () => {
     expect(runner.prepareInstance).not.toHaveBeenCalled();
   });
 
+  it('creates a bridge network that permits publishing the user database port', async () => {
+    const runner = {
+      prepareInstance: jest.fn().mockResolvedValue(undefined),
+      applyUserDataQuota: jest.fn().mockResolvedValue(undefined),
+      run: jest.fn().mockImplementation((args: string[]) => args[0] === 'network' && args[1] === 'inspect'
+        ? Promise.reject(new Error('network missing'))
+        : Promise.resolve('')),
+      waitForHealthy: jest.fn().mockResolvedValue(undefined),
+      waitForCommand: jest.fn().mockResolvedValue(undefined),
+      publishedPort: jest.fn().mockResolvedValue(34601),
+    };
+    const config = { get: jest.fn((key, fallback) => key === 'MANAGED_DATABASE_HOST' ? 'db.example.test' : fallback) };
+    const provisioner = new MysqlProvisioner(runner as any, config as any);
+
+    await provisioner.provision({ instanceId: 'db-1', databaseName: 'shop', username: 'ada@example.com', password: 'secret' });
+
+    expect(runner.run).toHaveBeenCalledWith(['network', 'create', 'big-o-private']);
+  });
+
   it('removes both its container and quota-managed data on cleanup', async () => {
     const runner = {
       remove: jest.fn().mockResolvedValue(undefined),

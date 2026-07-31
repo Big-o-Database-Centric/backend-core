@@ -31,7 +31,7 @@ export abstract class BaseDockerProvisioner implements DatabaseProvisioner {
     this.host();
     const name = this.containerName(input.instanceId);
     await this.docker.prepareInstance(input.instanceId);
-    await this.docker.run(['network', 'inspect', 'big-o-private']).catch(() => this.docker.run(['network', 'create', '--internal', 'big-o-private']));
+    await this.docker.run(['network', 'inspect', 'big-o-private']).catch(() => this.docker.run(['network', 'create', 'big-o-private']));
     await this.docker.run(['run', '--detach', '--name', name, '--network', 'big-o-private', '--publish', String(this.port), '--mount', `type=bind,src=${this.dataPath(input.instanceId)},dst=${targetPath}`, ...this.resourceLimits(), ...environment.flatMap((value) => ['--env', value]), this.image]);
     await this.docker.waitForHealthy(name);
     return this.docker.publishedPort(name, this.port);
