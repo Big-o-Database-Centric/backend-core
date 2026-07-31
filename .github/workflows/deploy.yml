@@ -68,6 +68,15 @@ jobs:
               -e SQL_SERVER_ENCRYPT="${{ secrets.SQL_SERVER_ENCRYPT }}" \
               -e SQL_SERVER_TRUST_SERVER_CERT="${{ secrets.SQL_SERVER_TRUST_SERVER_CERT }}" \
               ${{ env.IMAGE_NAME }}:latest
+            sleep 8
+            if ! docker inspect --format '{{.State.Running}}' backend-core | grep -qx true; then
+              docker logs backend-core || true
+              exit 1
+            fi
+            if ! docker exec backend-core node -e "fetch('http://127.0.0.1:3000/api/stats').then(r => { if (!r.ok) process.exit(1) }).catch(() => process.exit(1))"; then
+              docker logs backend-core || true
+              exit 1
+            fi
             docker image prune -f
 
 # Secrets requeridos (nivel repo u organización):
