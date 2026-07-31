@@ -1,0 +1,15 @@
+services:
+  backend-core:
+    image: big-o-backend-core:latest
+    environment:
+      MANAGED_DATABASE_DATA_ROOT: /srv/big-o/instances
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /srv/big-o/instances:/srv/big-o/instances
+    networks:
+      - big-o-private
+
+networks:
+  big-o-private:
+    name: big-o-private
+    internal: true

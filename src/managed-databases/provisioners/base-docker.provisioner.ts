@@ -1,0 +1,33 @@
+import { randomBytes } from 'node:crypto';
+import { ConfigService } from '@nestjs/config';
+import { DockerRunner } from './docker-runner';
+import { DatabaseProvisioner, ProvisionedConnection, ProvisioningInput } from '../database-provisioner';
+import { ManagedEngine } from '../managed-database.types';
+
+export abstract class BaseDockerProvisioner implements DatabaseProvisioner {
+  abstract readonly engine: ManagedEngine;
+  protected abstract readonly image: string;
+  protected abstract readonly port: number;
+  abstract provision(input: ProvisioningInput): Promise<ProvisionedConnection>;
+
+  constructor(protected readonly docker: DockerRunner, protected readonly config: ConfigService) {}
+
+  protected containerName(instanceId: string) { return `big-o-${this.engine}-${instanceId}`; }
+  protected dataPath(instanceId: string) { return `${this.config.get<string>('MANAGED_DATABASE_DATA_ROOT', '/srv/big-o/instances')}/${instanceId}`; }
+  protected host(instanceId: string) { return this.config.get<string>('MANAGED_DATABASE_HOST') ?? this.containerName(instanceId); }
+  protected rootPassword() { return randomBytes(24).toString('base64url'); }
+
+  protected async start(input: ProvisioningInput, environment: string[], targetPath: string): Promise<void> {
+    const name = this.containerName(input.instanceId);
+    await this.docker.prepareQuota(this.config.get<string>('MANAGED_DATABASE_QUOTA_COMMAND', '/usr/local/sbin/big-o-prepare-quota'), input.instanceId);
+    await this.docker.run(['network', 'inspect', 'big-o-private']).catch(() => this.docker.run(['network', 'create', '--internal', 'big-o-private']));
+    await this.docker.run(['run', '--detach', '--name', name, '--network', 'big-o-private', '--mount', `type=bind,src=${this.dataPath(input.instanceId)},dst=${targetPath}`, ...environment.flatMap((value) => ['--env', value]), this.image]);
+    await this.docker.waitForHealthy(name);
+  }
+
+  async destroy(instanceId: string): Promise<void> { await this.docker.remove(this.containerName(instanceId)); }
+
+  protected connection(input: ProvisioningInput): ProvisionedConnection {
+    return { host: this.host(input.instanceId), port: this.port, username: input.username };
+  }
+}

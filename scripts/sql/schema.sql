@@ -33,6 +33,14 @@ CREATE TABLE dbo.UserDatabases (
     UserId       INT NOT NULL FOREIGN KEY REFERENCES dbo.Users(UserId),
     DatabaseName NVARCHAR(100) NOT NULL,
     Engine       NVARCHAR(50)  NOT NULL,
+    InstanceId   UNIQUEIDENTIFIER NOT NULL DEFAULT NEWID(),
+    HostName     NVARCHAR(255) NULL,
+    Port         INT NULL,
+    DatabaseUser NVARCHAR(128) NULL,
+    EncryptedPassword VARBINARY(MAX) NULL,
+    QuotaBytes   BIGINT NOT NULL DEFAULT 20971520,
+    State        NVARCHAR(20) NOT NULL DEFAULT 'pending',
+    FailureReason NVARCHAR(250) NULL,
     CreatedAt    DATETIME2     NOT NULL DEFAULT SYSUTCDATETIME()
 );
 GO

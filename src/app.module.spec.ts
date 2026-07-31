@@ -12,7 +12,9 @@ describe('AppModule', () => {
       .overrideProvider(ConfigService)
       .useValue({
         get: (key: string) => `test-${key}`,
-        getOrThrow: (key: string) => `test-${key}`,
+        getOrThrow: (key: string) => key === 'DATABASE_CREDENTIALS_KEY'
+          ? Buffer.alloc(32, 1).toString('base64')
+          : `test-${key}`,
       })
       .compile();
 

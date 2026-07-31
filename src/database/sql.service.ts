@@ -1,6 +1,8 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as sql from 'mssql';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 export interface SqlParam {
   type: unknown;
@@ -38,6 +40,16 @@ export class SqlService {
           config.get('SQL_SERVER_TRUST_SERVER_CERT', 'false') === 'true',
       },
     });
-    return pool.connect();
+    const connected = await pool.connect();
+    if (typeof (pool as unknown as { request?: unknown }).request === 'function') {
+      await this.applyManagedDatabaseMigration(pool);
+    }
+    return connected;
+  }
+
+  private static async applyManagedDatabaseMigration(pool: sql.ConnectionPool): Promise<void> {
+    const migration = readFileSync(resolve(process.cwd(), 'scripts/sql/003-managed-databases.sql'), 'utf8');
+    const batches = migration.split(/^\s*GO\s*$/gim).map((batch) => batch.trim()).filter(Boolean);
+    for (const batch of batches) await pool.request().batch(batch);
   }
 }

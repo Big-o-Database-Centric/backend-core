@@ -18,8 +18,8 @@ cp .env.example .env
 # editar .env con los datos reales del VPS / SQL Server
 ```
 
-Ejecutar `scripts/sql/schema.sql` una vez contra la base de datos objetivo — crea las tablas
-(`Users`, `Sessions`, `UserDatabases`) y los 5 stored procedures.
+Ejecutar `scripts/sql/schema.sql` y luego `scripts/sql/003-managed-databases.sql` contra la base de datos objetivo.
+La segunda migración es aditiva: conserva usuarios existentes y añade el inventario y los procedimientos de aprovisionamiento.
 
 ```bash
 npm run start:dev   # desarrollo
