@@ -1,8 +1,11 @@
-import { BadRequestException, ConflictException, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, ConflictException, InternalServerErrorException, UnauthorizedException } from '@nestjs/common';
 import { ManagedDatabasesService } from './managed-databases.service';
 
 describe('ManagedDatabasesService', () => {
-  const repository = { reserve: jest.fn(), activate: jest.fn(), fail: jest.fn(), list: jest.fn() };
+  const repository = {
+    reserve: jest.fn(), activate: jest.fn(), fail: jest.fn(), list: jest.fn(),
+    beginDelete: jest.fn(), completeDelete: jest.fn(), failDelete: jest.fn(),
+  };
   const provisioner = { engine: 'mysql' as const, provision: jest.fn(), destroy: jest.fn() };
   const cipher = { encrypt: jest.fn().mockReturnValue(Buffer.from('encrypted')) };
   const config = { get: jest.fn((key: string, fallback?: string) => key === 'MANAGED_DATABASE_ENABLED_ENGINES' ? 'mysql,postgresql' : fallback) };
@@ -61,5 +64,26 @@ describe('ManagedDatabasesService', () => {
 
     expect(provisioner.destroy).toHaveBeenCalledWith('instance-7');
     expect(repository.fail).toHaveBeenCalledWith(7, 'Provisioning failed');
+  });
+
+  it('destroys the owned instance before permanently removing its record', async () => {
+    repository.beginDelete.mockResolvedValue({ Success: true, DatabaseId: 7, Engine: 'mysql', InstanceId: 'instance-7' });
+    repository.completeDelete.mockResolvedValue(true);
+
+    await expect(service.remove('token', 7)).resolves.toEqual({ databaseId: 7, deleted: true });
+
+    expect(provisioner.destroy).toHaveBeenCalledWith('instance-7');
+    expect(repository.completeDelete).toHaveBeenCalledWith(7);
+    expect(repository.failDelete).not.toHaveBeenCalled();
+  });
+
+  it('keeps the record failed when engine cleanup cannot complete', async () => {
+    repository.beginDelete.mockResolvedValue({ Success: true, DatabaseId: 7, Engine: 'mysql', InstanceId: 'instance-7' });
+    provisioner.destroy.mockRejectedValue(new Error('docker unavailable'));
+
+    await expect(service.remove('token', 7)).rejects.toThrow(InternalServerErrorException);
+
+    expect(repository.failDelete).toHaveBeenCalledWith(7, 'Deletion failed');
+    expect(repository.completeDelete).not.toHaveBeenCalled();
   });
 });

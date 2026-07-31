@@ -10,7 +10,7 @@ export interface ManagedDatabaseRecord {
   Port: number | null;
   DatabaseUser: string | null;
   QuotaBytes: number;
-  State: 'pending' | 'active' | 'failed' | 'inactive';
+  State: 'pending' | 'active' | 'deleting' | 'failed' | 'inactive';
   FailureReason: string | null;
   CreatedAt: string;
   ActivatedAt: string | null;
@@ -22,5 +22,13 @@ export interface ReservationResult {
   DatabaseId: number | null;
   UserId: number | null;
   Email: string | null;
+  InstanceId: string | null;
+}
+
+export interface DeleteReservationResult {
+  Success: boolean;
+  Message: string;
+  DatabaseId: number | null;
+  Engine: ManagedEngine | null;
   InstanceId: string | null;
 }

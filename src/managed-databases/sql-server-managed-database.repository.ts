@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import * as sql from 'mssql';
 import { SqlService } from '../database/sql.service';
 import { ManagedDatabaseRepository } from './managed-database.repository';
-import { ManagedDatabaseRecord, ManagedEngine, ReservationResult } from './managed-database.types';
+import { DeleteReservationResult, ManagedDatabaseRecord, ManagedEngine, ReservationResult } from './managed-database.types';
 
 @Injectable()
 export class SqlServerManagedDatabaseRepository implements ManagedDatabaseRepository {
@@ -40,6 +40,28 @@ export class SqlServerManagedDatabaseRepository implements ManagedDatabaseReposi
   async list(sessionToken: string | null): Promise<ManagedDatabaseRecord[]> {
     return this.sql.execute<ManagedDatabaseRecord>('sp_GetManagedDatabases', {
       SessionToken: { type: sql.UniqueIdentifier, value: sessionToken },
+    });
+  }
+
+  async beginDelete(sessionToken: string | null, databaseId: number): Promise<DeleteReservationResult> {
+    const [row] = await this.sql.execute<DeleteReservationResult>('sp_BeginDeleteManagedDatabase', {
+      SessionToken: { type: sql.UniqueIdentifier, value: sessionToken },
+      DatabaseId: { type: sql.Int, value: databaseId },
+    });
+    return row;
+  }
+
+  async completeDelete(databaseId: number): Promise<boolean> {
+    const [row] = await this.sql.execute<{ Success: boolean }>('sp_CompleteDeleteManagedDatabase', {
+      DatabaseId: { type: sql.Int, value: databaseId },
+    });
+    return row?.Success === true;
+  }
+
+  async failDelete(databaseId: number, reason: string): Promise<void> {
+    await this.sql.execute('sp_FailManagedDatabaseDeletion', {
+      DatabaseId: { type: sql.Int, value: databaseId },
+      FailureReason: { type: sql.NVarChar(250), value: reason.slice(0, 250) },
     });
   }
 

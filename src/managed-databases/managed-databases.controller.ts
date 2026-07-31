@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Req } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseIntPipe, Post, Req } from '@nestjs/common';
 import type { Request } from 'express';
 import { CreateManagedDatabaseDto } from './dto/create-managed-database.dto';
 import { ManagedDatabasesService } from './managed-databases.service';
@@ -20,5 +20,10 @@ export class ManagedDatabasesController {
   @Get('capabilities')
   capabilities() {
     return this.service.capabilities();
+  }
+
+  @Delete(':databaseId')
+  remove(@Req() req: Request, @Param('databaseId', ParseIntPipe) databaseId: number) {
+    return this.service.remove(req.cookies?.session_token ?? null, databaseId);
   }
 }

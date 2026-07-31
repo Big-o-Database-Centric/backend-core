@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Inject, Injectable, InternalServerErrorException, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Inject, Injectable, InternalServerErrorException, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { randomBytes } from 'node:crypto';
 import { CredentialCipherService } from './credential-cipher.service';
@@ -65,6 +65,30 @@ export class ManagedDatabasesService {
     const records = await this.repository.list(sessionToken);
     if (records.length === 1 && (records[0] as any).Success === false) throw new UnauthorizedException();
     return records;
+  }
+
+  async remove(sessionToken: string | null, databaseId: number) {
+    const reservation = await this.repository.beginDelete(sessionToken, databaseId);
+    if (!reservation?.Success) {
+      if (reservation?.Message === 'Unauthorized') throw new UnauthorizedException();
+      throw new NotFoundException('Database not found');
+    }
+
+    const provisioner = reservation.Engine ? this.byEngine.get(reservation.Engine) : undefined;
+    if (!provisioner || !reservation.DatabaseId || !reservation.InstanceId) {
+      if (reservation?.DatabaseId) await this.repository.failDelete(reservation.DatabaseId, 'Deletion failed');
+      throw new InternalServerErrorException('Database deletion failed');
+    }
+
+    try {
+      await provisioner.destroy(reservation.InstanceId);
+      const deleted = await this.repository.completeDelete(reservation.DatabaseId);
+      if (!deleted) throw new Error('Database deletion was not completed');
+      return { databaseId: reservation.DatabaseId, deleted: true };
+    } catch {
+      await Promise.resolve(this.repository.failDelete(reservation.DatabaseId, 'Deletion failed')).catch(() => undefined);
+      throw new InternalServerErrorException('Database deletion failed');
+    }
   }
 
   capabilities() {
