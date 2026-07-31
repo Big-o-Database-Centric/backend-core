@@ -67,6 +67,8 @@ jobs:
               -e DATABASE_CREDENTIALS_KEY="${{ secrets.DATABASE_CREDENTIALS_KEY }}" \
               -e MANAGED_DATABASE_DATA_ROOT="${{ vars.MANAGED_DATABASE_DATA_ROOT || '/srv/big-o/instances' }}" \
               -e MANAGED_DATABASE_HOST="${{ vars.MANAGED_DATABASE_HOST }}" \
+              -e MANAGED_DATABASE_ENABLED_ENGINES="${{ vars.MANAGED_DATABASE_ENABLED_ENGINES || 'mysql,postgresql' }}" \
+              -e MANAGED_DATABASE_MAX_TOTAL="${{ vars.MANAGED_DATABASE_MAX_TOTAL || '2' }}" \
               -e MANAGED_DATABASE_QUOTA_HELPER_IMAGE="${{ env.IMAGE_NAME }}:quota-helper" \
               -e PUBLIC_BASE_URL="${{ vars.PUBLIC_BASE_URL || 'https://big-o.andrescortes.dev' }}" \
               -e AUTH_GOOGLE_ID="${{ secrets.AUTH_GOOGLE_ID }}" \
@@ -137,5 +139,6 @@ jobs:
 # Los cinco AUTH_* los leen las estrategias OAuth con getOrThrow al construirse:
 # si falta cualquiera, TODO el backend falla al arrancar (no solo OAuth).
 # PUBLIC_BASE_URL se pasa como variable (vars) con default al dominio de prod.
-# MANAGED_DATABASE_DATA_ROOT y MANAGED_DATABASE_HOST son variables de repositorio.
+# MANAGED_DATABASE_DATA_ROOT, MANAGED_DATABASE_HOST,
+# MANAGED_DATABASE_ENABLED_ENGINES y MANAGED_DATABASE_MAX_TOTAL son variables de repositorio.
 # Antes de activar provisionamiento, consulte infra/managed-databases/README.md.
