@@ -186,19 +186,122 @@ npm.cmd run build
 Las pruebas unitarias simulan repositorio y proveedor; verifican autorización, reservas,
 límites, traducción de errores, ausencia de contenido en SQL y manejo seguro de la credencial.
 
-Un smoke test local autenticado, con SQL aislado ya migrado y backend en ejecución, usa solo
-la API de Big O:
+## Prueba controlada con proveedor real
+
+Esta prueba es una puerta de publicación y se ejecuta una sola vez, únicamente cuando existen
+todos estos prerrequisitos:
+
+- SQL Server local, desechable y aislado, con las migraciones aplicadas; las variables
+  `SQL_*` deben apuntar a ese entorno y **nunca** a SQL de producción;
+- un usuario de prueba local y una cookie autenticada obtenida contra ese mismo backend;
+- la credencial de PolyService disponible mediante un canal seguro, sin guardarla en `.env`,
+  archivos, portapapeles compartidos, historial de shell ni línea de comandos;
+- puerto local disponible y build del backend terminado con `npm.cmd run build`.
+
+SQL de producción no es un sustituto aceptable para ningún paso. Si falta un prerrequisito,
+registrar la prueba como pendiente y detenerse.
+
+### 1. Inyectar la clave solo en el proceso y arrancar el backend aislado
+
+Abrir una PowerShell dedicada, después de configurar allí las variables `SQL_*` del entorno
+aislado. Capturar la clave sin eco, iniciar el proceso hijo para que herede la variable y
+eliminarla inmediatamente del proceso padre:
 
 ```powershell
-curl.exe -s -b "session_token=<session-token>" http://localhost:3000/api/ai/capabilities
-curl.exe -s -b "session_token=<session-token>" -H "Content-Type: application/json" `
-  -d '{"messages":[{"role":"user","content":"<test-message>"}],"maxTokens":64}' `
-  http://localhost:3000/api/ai/chat
+$secureProviderKey = Read-Host 'PolyService key' -AsSecureString
+$keyPointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secureProviderKey)
+try {
+  $plainProviderKey = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($keyPointer)
+  $env:POLYSERVICE_AI_KEY = $plainProviderKey
+  $backendProcess = Start-Process -FilePath 'node.exe' -ArgumentList 'dist/main.js' `
+    -WindowStyle Hidden -PassThru
+} finally {
+  $plainProviderKey = $null
+  [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($keyPointer)
+  $secureProviderKey.Dispose()
+  Remove-Item Env:POLYSERVICE_AI_KEY -ErrorAction SilentlyContinue
+}
 ```
 
-No ejecutar el segundo comando con un proveedor real salvo que estén disponibles, de forma
-local y aislada, una base SQL con usuario/sesión de prueba y una credencial ya inyectada de
-manera segura. Nunca usar SQL de producción para esta prueba.
+No imprimir la variable, inspeccionar el environment del proceso hijo ni redirigirlo a un
+archivo. Confirmar que `GET http://localhost:3000/api/stats` responde antes de continuar.
+
+### 2. Crear la sesión de prueba sin mostrar la cookie
+
+Usar una cuenta que exista solo en el SQL aislado. `WebRequestSession` conserva la cookie
+httpOnly en memoria y evita copiarla a la terminal:
+
+```powershell
+$testSession = New-Object Microsoft.PowerShell.Commands.WebRequestSession
+$loginBody = @{ email = '<test-email>'; password = '<test-password>' } | ConvertTo-Json
+$null = Invoke-RestMethod -Method Post -Uri 'http://localhost:3000/api/auth/login' `
+  -ContentType 'application/json' -Body $loginBody -WebSession $testSession
+```
+
+### 3. Enviar exactamente una solicitud al proveedor
+
+Hacer una sola llamada a `/api/ai/chat`, con un único mensaje no sensible y
+`maxTokens: 64`. Conservar la respuesta solo en memoria y producir únicamente verificaciones
+booleanas; no imprimir ni guardar el contenido del asistente:
+
+```powershell
+$chatBody = @{
+  messages = @(@{ role = 'user'; content = '<non-sensitive-test-message>' })
+  maxTokens = 64
+} | ConvertTo-Json -Depth 4
+$chatResult = Invoke-RestMethod -Method Post -Uri 'http://localhost:3000/api/ai/chat' `
+  -ContentType 'application/json' -Body $chatBody -WebSession $testSession
+
+$checks = [ordered]@{
+  FixedModel = $chatResult.model -eq 'llama-8b-nvidia'
+  AssistantRole = $chatResult.message.role -eq 'assistant'
+  AssistantContentNonEmpty = -not [string]::IsNullOrWhiteSpace([string]$chatResult.message.content)
+  PromptUsagePresent = $null -ne $chatResult.usage.promptTokens -and $chatResult.usage.promptTokens -ge 0
+  CompletionUsagePresent = $null -ne $chatResult.usage.completionTokens -and $chatResult.usage.completionTokens -ge 0
+  TotalUsageConsistent = $chatResult.usage.totalTokens -eq `
+    ($chatResult.usage.promptTokens + $chatResult.usage.completionTokens)
+}
+if ($checks.Values -contains $false) { throw 'Controlled AI response verification failed' }
+$checks
+```
+
+### 4. Verificar la fila SQL sin contenido
+
+En el SQL aislado, consultar la fila más reciente del usuario de prueba creada después de
+iniciar el test:
+
+```sql
+SELECT TOP (1)
+    RequestId, UserId, ReservedAt, CompletedAt, State,
+    ProviderStatus, LatencyMs, PromptTokens, CompletionTokens, TotalTokens
+FROM dbo.AiRequests
+WHERE UserId = <test-user-id>
+  AND ReservedAt >= <test-start-utc>
+ORDER BY ReservedAt DESC;
+```
+
+Verificar `State = 'completed'`, `ProviderStatus = 200`, timestamps presentes, latencia no
+negativa y los mismos tres conteos de tokens. La tabla no debe tener columnas ni valores de
+prompt/respuesta; no añadirlos al query, captura o reporte.
+
+### 5. Limpiar siempre
+
+Después de verificar —o en un bloque `finally` si algo falla— borrar las referencias en
+memoria, detener únicamente el backend local iniciado para la prueba y volver a asegurar que
+la variable no existe en el proceso actual:
+
+```powershell
+$chatResult = $null
+$testSession = $null
+if ($backendProcess -and -not $backendProcess.HasExited) {
+  Stop-Process -Id $backendProcess.Id
+}
+Remove-Item Env:POLYSERVICE_AI_KEY -ErrorAction SilentlyContinue
+if (Test-Path Env:POLYSERVICE_AI_KEY) { throw 'Provider key cleanup failed' }
+```
+
+El reporte registra solamente el resultado de las comprobaciones, status/metadatos y la
+limpieza; nunca la clave, el mensaje de prueba ni el contenido del asistente.
 
 ## Publicación segura
 
