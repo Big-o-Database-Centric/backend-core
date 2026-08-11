@@ -11,5 +11,10 @@ describe('managed database deployment contract', () => {
     expect(workflow).toContain('MANAGED_DATABASE_MAX_TOTAL="${{ vars.MANAGED_DATABASE_MAX_TOTAL || \'4\' }}"');
     expect(workflow).toContain('docker inspect backend-core-previous');
     expect(workflow).toContain('docker rename backend-core-previous backend-core');
+    expect(workflow).toContain('-e POLYSERVICE_AI_KEY="${{ secrets.POLYSERVICE_AI_KEY }}"');
+    expect(workflow).toContain('AI_USER_PER_MINUTE');
+    expect(workflow).toContain('AI_USER_PER_DAY');
+    expect(workflow).toContain('AI_GLOBAL_PER_MINUTE');
+    expect(workflow).toContain('AI_GLOBAL_PER_DAY');
   });
 });

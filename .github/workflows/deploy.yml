@@ -64,6 +64,11 @@ jobs:
               -e NODE_ENV=production \
               -e CORS_ORIGIN="${{ vars.CORS_ORIGIN || 'https://big-o.andrescortes.dev' }}" \
               -e AUTH_SECRET="${{ secrets.AUTH_SECRET }}" \
+              -e POLYSERVICE_AI_KEY="${{ secrets.POLYSERVICE_AI_KEY }}" \
+              -e AI_USER_PER_MINUTE="${{ vars.AI_USER_PER_MINUTE || '3' }}" \
+              -e AI_USER_PER_DAY="${{ vars.AI_USER_PER_DAY || '10' }}" \
+              -e AI_GLOBAL_PER_MINUTE="${{ vars.AI_GLOBAL_PER_MINUTE || '9' }}" \
+              -e AI_GLOBAL_PER_DAY="${{ vars.AI_GLOBAL_PER_DAY || '90' }}" \
               -e DATABASE_CREDENTIALS_KEY="${{ secrets.DATABASE_CREDENTIALS_KEY }}" \
               -e MANAGED_DATABASE_DATA_ROOT="${{ vars.MANAGED_DATABASE_DATA_ROOT || '/srv/big-o/instances' }}" \
               -e MANAGED_DATABASE_HOST="${{ vars.MANAGED_DATABASE_HOST }}" \
