@@ -18,8 +18,10 @@ cp .env.example .env
 # editar .env con los datos reales del VPS / SQL Server
 ```
 
-Ejecutar `scripts/sql/schema.sql` y luego `scripts/sql/003-managed-databases.sql` contra la base de datos objetivo.
-La segunda migración es aditiva: conserva usuarios existentes y añade el inventario y los procedimientos de aprovisionamiento.
+Ejecutar `scripts/sql/schema.sql` en una base nueva. Al iniciar, el backend aplica en orden
+`scripts/sql/003-managed-databases.sql` y `scripts/sql/004-ai-usage.sql`; ambas migraciones
+son aditivas y conservan los usuarios existentes. En despliegue, el contenedor candidato
+debe completar este arranque y su comprobación de salud antes de reemplazar al backend activo.
 
 ```bash
 npm run start:dev   # desarrollo
@@ -38,12 +40,24 @@ npm test              # suite de unit tests (Jest)
 | GET | `/api/stats` | — (público) | `sp_GetPlatformStats` |
 | GET | `/api/me` | — (cookie `session_token`) | `sp_GetUserInfo` |
 | GET | `/api/my-databases` | — (cookie `session_token`) | `sp_GetUserDatabases` |
+| GET | `/api/ai/capabilities` | — (cookie `session_token`) | `sp_GetAiCapabilities` |
+| POST | `/api/ai/chat` | `{ messages, maxTokens? }` (cookie `session_token`) | `sp_ReserveAiRequest`, `sp_CompleteAiRequest` |
 
 ## Sesión
 
 `sp_Login` exitoso setea una cookie httpOnly `session_token`. El frontend debe llamar con
 `fetch(url, { credentials: 'include' })` para que el navegador la mande de vuelta en cada
 request a `/api/me` y `/api/my-databases`.
+
+## IA administrada
+
+Big O administra centralmente la credencial de PolyService mediante la variable de entorno
+`POLYSERVICE_AI_KEY`. Los usuarios registrados nunca configuran ni reciben esa credencial:
+el navegador solo llama a `/api/ai/*` con la cookie de sesión de Big O.
+
+La guía operativa completa —configuración, contrato HTTP, cuotas, almacenamiento, errores,
+verificación local y orden seguro de publicación— está en
+[`docs/POLYSERVICE_AI.md`](docs/POLYSERVICE_AI.md).
 
 ## Reglas de arquitectura
 
