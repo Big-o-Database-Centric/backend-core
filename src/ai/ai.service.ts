@@ -11,7 +11,8 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { AI_PROVIDER, AiProvider, AiProviderError } from './ai-provider';
+import { isUUID } from 'class-validator';
+import { AI_PROVIDER, AiProvider, AiProviderError, AiProviderResponse } from './ai-provider';
 import {
   AI_USAGE_REPOSITORY,
   AiLimits,
@@ -42,6 +43,8 @@ export class AiService {
   }
 
   async chat(sessionToken: string | null, dto: CreateAiChatDto) {
+    if (!isUUID(sessionToken)) throw new UnauthorizedException();
+
     const messages = dto.messages.map((message) => ({
       ...message,
       content: message.content.trim(),
@@ -65,25 +68,12 @@ export class AiService {
       throw new InternalServerErrorException('AI reservation failed');
     }
 
+    let result: AiProviderResponse;
     try {
-      const result = await this.provider.chat({
+      result = await this.provider.chat({
         messages,
         maxTokens: dto.maxTokens ?? 256,
       });
-      await this.repository.complete(reservation.RequestId, {
-        state: 'completed',
-        providerStatus: result.providerStatus,
-        latencyMs: result.latencyMs,
-        promptTokens: result.usage.promptTokens,
-        completionTokens: result.usage.completionTokens,
-        totalTokens: result.usage.totalTokens,
-      });
-      return {
-        model: result.model,
-        message: result.message,
-        usage: result.usage,
-        remaining: { today: reservation.RemainingToday },
-      };
     } catch (error) {
       const providerError = error instanceof AiProviderError
         ? error
@@ -108,9 +98,26 @@ export class AiService {
       }
       throw new BadGatewayException('AI service unavailable');
     }
+
+    await this.repository.complete(reservation.RequestId, {
+      state: 'completed',
+      providerStatus: result.providerStatus,
+      latencyMs: result.latencyMs,
+      promptTokens: result.usage.promptTokens,
+      completionTokens: result.usage.completionTokens,
+      totalTokens: result.usage.totalTokens,
+    }).catch(() => undefined);
+    return {
+      model: result.model,
+      message: result.message,
+      usage: result.usage,
+      remaining: { today: reservation.RemainingToday },
+    };
   }
 
   async capabilities(sessionToken: string | null) {
+    if (!isUUID(sessionToken)) throw new UnauthorizedException();
+
     const result = await this.repository.getCapabilities(sessionToken, this.limits);
     if (!result?.Success) throw new UnauthorizedException();
 

@@ -13,7 +13,16 @@ export class PolyServiceAiProvider implements AiProvider {
   private readonly endpoint: string;
 
   constructor(config: ConfigService) {
-    this.apiKey = config.getOrThrow<string>('POLYSERVICE_AI_KEY');
+    let configuredApiKey: unknown;
+    try {
+      configuredApiKey = config.getOrThrow<unknown>('POLYSERVICE_AI_KEY');
+    } catch {
+      throw new Error('POLYSERVICE_AI_KEY is required');
+    }
+    if (typeof configuredApiKey !== 'string' || !configuredApiKey.trim()) {
+      throw new Error('POLYSERVICE_AI_KEY is required');
+    }
+    this.apiKey = configuredApiKey.trim();
     const baseUrl = config.get<string>('POLYSERVICE_AI_BASE_URL', 'https://ia.polyrepo.andrescortes.dev');
     this.endpoint = `${baseUrl.replace(/\/$/, '')}/v1/chat/completions`;
   }
@@ -44,17 +53,28 @@ export class PolyServiceAiProvider implements AiProvider {
       throw new AiProviderError(code, null, Date.now() - started);
     }
 
-    const latencyMs = Date.now() - started;
+    const headersLatencyMs = Date.now() - started;
     if (!response.ok) {
       const code = response.status === 429
         ? 'quota'
         : response.status === 401 || response.status === 403
           ? 'credential'
-          : 'upstream';
-      throw new AiProviderError(code, response.status, latencyMs);
+          : response.status === 504
+            ? 'timeout'
+            : 'upstream';
+      throw new AiProviderError(code, response.status, headersLatencyMs);
     }
 
-    const body: unknown = await response.json().catch(() => null);
+    let body: unknown;
+    try {
+      body = await response.json();
+    } catch (error) {
+      const code = error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError')
+        ? 'timeout'
+        : 'invalid_response';
+      throw new AiProviderError(code, response.status, Date.now() - started);
+    }
+    const latencyMs = Date.now() - started;
     const value = body as {
       choices?: Array<{ message?: { role?: string; content?: unknown } }>;
       usage?: Record<string, unknown>;

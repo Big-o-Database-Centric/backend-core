@@ -3,11 +3,27 @@ import { plainToInstance } from 'class-transformer';
 import { validateSync } from 'class-validator';
 import { CreateAiChatDto } from './create-ai-chat.dto';
 
-const errorsFor = (value: object) => validateSync(plainToInstance(CreateAiChatDto, value));
+const instanceFor = (value: object) => plainToInstance(CreateAiChatDto, value);
+const errorsFor = (value: object) => validateSync(instanceFor(value));
 
 describe('CreateAiChatDto', () => {
   it('accepts the bounded default request', () => {
     expect(errorsFor({ messages: [{ role: 'user', content: 'Hola' }] })).toHaveLength(0);
+  });
+
+  it('trims padded content to exactly 4,000 characters before validation', () => {
+    const instance = instanceFor({
+      messages: [{ role: 'user', content: `  ${'x'.repeat(4000)}  ` }],
+    });
+
+    expect(validateSync(instance)).toHaveLength(0);
+    expect(instance.messages[0].content).toBe('x'.repeat(4000));
+  });
+
+  it('rejects padded content whose trimmed length is 4,001 characters', () => {
+    expect(errorsFor({
+      messages: [{ role: 'user', content: `  ${'x'.repeat(4001)}  ` }],
+    })).not.toHaveLength(0);
   });
 
   it.each([

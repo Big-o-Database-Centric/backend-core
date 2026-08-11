@@ -1,4 +1,5 @@
 import { SqlService } from '../database/sql.service';
+import { VALID_SESSION_TOKEN } from './ai.test-fixtures';
 import { SqlServerAiUsageRepository } from './sql-server-ai-usage.repository';
 
 describe('SqlServerAiUsageRepository', () => {
@@ -13,7 +14,7 @@ describe('SqlServerAiUsageRepository', () => {
     const execute = sqlService.execute as jest.Mock;
     execute.mockResolvedValue([{ Success: true, Message: 'Reserved', RequestId: 'request-1', RemainingToday: 9 }]);
 
-    const result = await repository.reserve('session-1', {
+    const result = await repository.reserve(VALID_SESSION_TOKEN, {
       userPerMinute: 3,
       userPerDay: 10,
       globalPerMinute: 9,
@@ -22,7 +23,7 @@ describe('SqlServerAiUsageRepository', () => {
 
     expect(result).toEqual({ Success: true, Message: 'Reserved', RequestId: 'request-1', RemainingToday: 9 });
     expect(execute).toHaveBeenCalledWith('sp_ReserveAiRequest', expect.objectContaining({
-      SessionToken: expect.objectContaining({ value: 'session-1' }),
+      SessionToken: expect.objectContaining({ value: VALID_SESSION_TOKEN }),
       UserPerMinute: expect.objectContaining({ value: 3 }),
       UserPerDay: expect.objectContaining({ value: 10 }),
       GlobalPerMinute: expect.objectContaining({ value: 9 }),
@@ -58,7 +59,7 @@ describe('SqlServerAiUsageRepository', () => {
     const execute = sqlService.execute as jest.Mock;
     execute.mockResolvedValue([{ Success: true, Message: 'Available', RequestId: null, RemainingToday: 7 }]);
 
-    const result = await repository.getCapabilities('session-1', {
+    const result = await repository.getCapabilities(VALID_SESSION_TOKEN, {
       userPerMinute: 3,
       userPerDay: 10,
       globalPerMinute: 9,
@@ -67,7 +68,7 @@ describe('SqlServerAiUsageRepository', () => {
 
     expect(result).toEqual({ Success: true, Message: 'Available', RequestId: null, RemainingToday: 7 });
     expect(execute).toHaveBeenCalledWith('sp_GetAiCapabilities', expect.objectContaining({
-      SessionToken: expect.objectContaining({ value: 'session-1' }),
+      SessionToken: expect.objectContaining({ value: VALID_SESSION_TOKEN }),
       UserPerDay: expect.objectContaining({ value: 10 }),
     }));
   });
