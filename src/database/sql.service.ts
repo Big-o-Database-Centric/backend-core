@@ -11,6 +11,11 @@ export interface SqlParam {
 
 @Injectable()
 export class SqlService {
+  private static readonly migrations = [
+    'scripts/sql/003-managed-databases.sql',
+    'scripts/sql/004-ai-usage.sql',
+  ];
+
   constructor(@Inject('MSSQL_POOL') private readonly pool: sql.ConnectionPool) {}
 
   async execute<T = Record<string, unknown>>(
@@ -42,14 +47,16 @@ export class SqlService {
     });
     const connected = await pool.connect();
     if (typeof (pool as unknown as { request?: unknown }).request === 'function') {
-      await this.applyManagedDatabaseMigration(pool);
+      await this.applyMigrations(pool);
     }
     return connected;
   }
 
-  private static async applyManagedDatabaseMigration(pool: sql.ConnectionPool): Promise<void> {
-    const migration = readFileSync(resolve(process.cwd(), 'scripts/sql/003-managed-databases.sql'), 'utf8');
-    const batches = migration.split(/^\s*GO\s*$/gim).map((batch) => batch.trim()).filter(Boolean);
-    for (const batch of batches) await pool.request().batch(batch);
+  private static async applyMigrations(pool: sql.ConnectionPool): Promise<void> {
+    for (const file of this.migrations) {
+      const migration = readFileSync(resolve(process.cwd(), file), 'utf8');
+      const batches = migration.split(/^\s*GO\s*$/gim).map((batch) => batch.trim()).filter(Boolean);
+      for (const batch of batches) await pool.request().batch(batch);
+    }
   }
 }

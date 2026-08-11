@@ -1,11 +1,16 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import * as sql from 'mssql';
+import { readFileSync } from 'node:fs';
 import { SqlService } from './sql.service';
 
 jest.mock('mssql', () => ({
   ConnectionPool: jest.fn(),
   NVarChar: Symbol('NVarChar'),
+}));
+
+jest.mock('node:fs', () => ({
+  readFileSync: jest.fn(),
 }));
 
 interface MockConfigService {
@@ -56,7 +61,7 @@ describe('SqlService', () => {
 
 describe('SqlService.createPool', () => {
   let mockConfigService: MockConfigService;
-  let mockPoolInstance: { connect: jest.Mock };
+  let mockPoolInstance: { connect: jest.Mock; request?: jest.Mock };
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -228,5 +233,24 @@ describe('SqlService.createPool', () => {
     const result = await SqlService.createPool(mockConfigService as unknown as ConfigService);
 
     expect(result).toEqual(expectedConnection);
+  });
+
+  it('applies additive migrations in order after connecting', async () => {
+    const batch = jest.fn().mockResolvedValue(undefined);
+    mockPoolInstance.request = jest.fn().mockReturnValue({ batch });
+    (readFileSync as jest.Mock).mockReturnValue('SELECT 1;');
+
+    await SqlService.createPool(mockConfigService as unknown as ConfigService);
+
+    expect(readFileSync).toHaveBeenNthCalledWith(
+      1,
+      expect.stringContaining('003-managed-databases.sql'),
+      'utf8',
+    );
+    expect(readFileSync).toHaveBeenNthCalledWith(
+      2,
+      expect.stringContaining('004-ai-usage.sql'),
+      'utf8',
+    );
   });
 });
