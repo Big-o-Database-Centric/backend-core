@@ -201,107 +201,193 @@ todos estos prerrequisitos:
 SQL de producción no es un sustituto aceptable para ningún paso. Si falta un prerrequisito,
 registrar la prueba como pendiente y detenerse.
 
-### 1. Inyectar la clave solo en el proceso y arrancar el backend aislado
+### Procedimiento único con limpieza garantizada
 
-Abrir una PowerShell dedicada, después de configurar allí las variables `SQL_*` del entorno
-aislado. Capturar la clave sin eco, iniciar el proceso hijo para que herede la variable y
-eliminarla inmediatamente del proceso padre:
+Abrir una PowerShell dedicada después de configurar allí las variables `SQL_*` del entorno
+aislado. Ejecutar el bloque completo como una sola unidad: arranque, login, la única llamada
+de chat, comprobaciones de respuesta y consulta de metadatos están dentro del mismo `try`; el
+`finally` siempre limpia aunque cualquiera de esos pasos lance una excepción.
+
+El query usa el paquete `mssql` ya instalado por el backend y hereda las variables del SQL
+aislado. Reemplazar únicamente los placeholders entre `<...>`:
 
 ```powershell
-$secureProviderKey = Read-Host 'PolyService key' -AsSecureString
-$keyPointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secureProviderKey)
+$backendProcess = $null
+$secureProviderKey = $null
+$keyPointer = [IntPtr]::Zero
+$plainProviderKey = $null
+$testSession = $null
+$loginBody = $null
+$chatBody = $null
+$chatResult = $null
+$metadata = $null
+$testStartedUtc = [DateTime]::UtcNow
+
 try {
+  # Captura sin eco; nunca imprimir, guardar ni pasar la clave por línea de comandos.
+  $secureProviderKey = Read-Host 'PolyService key' -AsSecureString
+  $keyPointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secureProviderKey)
   $plainProviderKey = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($keyPointer)
   $env:POLYSERVICE_AI_KEY = $plainProviderKey
+
+  # Solo este proceso hijo hereda la clave. Se conserva su objeto/Id para limpieza exacta.
   $backendProcess = Start-Process -FilePath 'node.exe' -ArgumentList 'dist/main.js' `
     -WindowStyle Hidden -PassThru
-} finally {
+
+  # El hijo ya heredó el valor: borrarlo inmediatamente del proceso PowerShell padre.
+  Remove-Item Env:POLYSERVICE_AI_KEY -ErrorAction SilentlyContinue
   $plainProviderKey = $null
   [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($keyPointer)
+  $keyPointer = [IntPtr]::Zero
   $secureProviderKey.Dispose()
+  $secureProviderKey = $null
+
+  # Esperar readiness sin iniciar otra instancia ni continuar si el hijo terminó.
+  $ready = $false
+  $readyDeadline = [DateTime]::UtcNow.AddSeconds(30)
+  do {
+    if ($backendProcess.HasExited) { throw 'Isolated backend exited before readiness' }
+    try {
+      $statsResponse = Invoke-WebRequest -Uri 'http://localhost:3000/api/stats' `
+        -UseBasicParsing -TimeoutSec 2
+      $ready = $statsResponse.StatusCode -eq 200
+    } catch {
+      Start-Sleep -Seconds 1
+    }
+  } until ($ready -or [DateTime]::UtcNow -ge $readyDeadline)
+  if (-not $ready) { throw 'Isolated backend readiness timed out' }
+
+  # Cookie httpOnly solo en memoria, obtenida con una cuenta del SQL aislado.
+  $testSession = New-Object Microsoft.PowerShell.Commands.WebRequestSession
+  $loginBody = @{ email = '<test-email>'; password = '<test-password>' } | ConvertTo-Json
+  $null = Invoke-RestMethod -Method Post -Uri 'http://localhost:3000/api/auth/login' `
+    -ContentType 'application/json' -Body $loginBody -WebSession $testSession
+
+  # Exactamente una llamada al proveedor: un mensaje no sensible y maxTokens 64.
+  $chatBody = @{
+    messages = @(@{ role = 'user'; content = '<non-sensitive-test-message>' })
+    maxTokens = 64
+  } | ConvertTo-Json -Depth 4
+  $chatResult = Invoke-RestMethod -Method Post -Uri 'http://localhost:3000/api/ai/chat' `
+    -ContentType 'application/json' -Body $chatBody -WebSession $testSession
+
+  $responseChecks = [ordered]@{
+    FixedModel = $chatResult.model -eq 'llama-8b-nvidia'
+    AssistantRole = $chatResult.message.role -eq 'assistant'
+    AssistantContentNonEmpty = `
+      -not [string]::IsNullOrWhiteSpace([string]$chatResult.message.content)
+    PromptUsagePresent = `
+      $null -ne $chatResult.usage.promptTokens -and $chatResult.usage.promptTokens -ge 0
+    CompletionUsagePresent = `
+      $null -ne $chatResult.usage.completionTokens -and $chatResult.usage.completionTokens -ge 0
+    TotalUsageConsistent = $chatResult.usage.totalTokens -eq `
+      ($chatResult.usage.promptTokens + $chatResult.usage.completionTokens)
+  }
+  if ($responseChecks.Values -contains $false) {
+    throw 'Controlled AI response verification failed'
+  }
+
+  # Consulta metadata-only dentro del mismo try. No selecciona prompt ni respuesta.
+  $metadataProbe = @'
+const sql = require('mssql');
+(async () => {
+  const pool = await sql.connect({
+    server: process.env.SQL_SERVER,
+    database: process.env.SQL_DATABASE,
+    user: process.env.SQL_USER,
+    password: process.env.SQL_PASSWORD,
+    port: Number(process.env.SQL_PORT || 1433),
+    options: {
+      encrypt: (process.env.SQL_SERVER_ENCRYPT || 'true') === 'true',
+      trustServerCertificate:
+        (process.env.SQL_SERVER_TRUST_SERVER_CERT || 'false') === 'true'
+    }
+  });
+  const result = await pool.request()
+    .input('userId', sql.Int, Number(process.argv[1]))
+    .input('testStartedUtc', sql.DateTime2, new Date(process.argv[2]))
+    .query(`SELECT TOP (1)
+      RequestId, UserId, ReservedAt, CompletedAt, State,
+      ProviderStatus, LatencyMs, PromptTokens, CompletionTokens, TotalTokens
+      FROM dbo.AiRequests
+      WHERE UserId = @userId AND ReservedAt >= @testStartedUtc
+      ORDER BY ReservedAt DESC`);
+  process.stdout.write(JSON.stringify(result.recordset[0] || null));
+  await pool.close();
+})().catch(() => {
+  process.stderr.write('Metadata query failed');
+  process.exit(1);
+});
+'@
+  $metadataJson = & node.exe -e $metadataProbe '<test-user-id>' `
+    ($testStartedUtc.ToString('o'))
+  if ($LASTEXITCODE -ne 0) { throw 'Metadata query process failed' }
+  $metadata = $metadataJson | ConvertFrom-Json
+
+  $metadataChecks = [ordered]@{
+    RowPresent = $null -ne $metadata
+    Completed = $metadata.State -eq 'completed'
+    ProviderStatusOk = $metadata.ProviderStatus -eq 200
+    TimestampsPresent = $null -ne $metadata.ReservedAt -and $null -ne $metadata.CompletedAt
+    LatencyNonNegative = $null -ne $metadata.LatencyMs -and $metadata.LatencyMs -ge 0
+    PromptTokensMatch = $metadata.PromptTokens -eq $chatResult.usage.promptTokens
+    CompletionTokensMatch = `
+      $metadata.CompletionTokens -eq $chatResult.usage.completionTokens
+    TotalTokensMatch = $metadata.TotalTokens -eq $chatResult.usage.totalTokens
+    MetadataOnly = @($metadata.PSObject.Properties.Name | Where-Object {
+      $_ -match 'PromptContent|ResponseContent|MessageContent'
+    }).Count -eq 0
+  }
+  if ($metadataChecks.Values -contains $false) {
+    throw 'Controlled AI metadata verification failed'
+  }
+
+  # Imprimir solo booleanos; nunca contenido, cookie, credenciales ni valores sensibles.
+  $responseChecks
+  $metadataChecks
+} finally {
+  $chatResult = $null
+  $metadata = $null
+  $testSession = $null
+  $loginBody = $null
+  $chatBody = $null
+  $plainProviderKey = $null
+
+  if ($keyPointer -ne [IntPtr]::Zero) {
+    [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($keyPointer)
+    $keyPointer = [IntPtr]::Zero
+  }
+  if ($secureProviderKey) {
+    $secureProviderKey.Dispose()
+    $secureProviderKey = $null
+  }
   Remove-Item Env:POLYSERVICE_AI_KEY -ErrorAction SilentlyContinue
+
+  $cleanupFailures = @()
+  if ($backendProcess) {
+    if (-not $backendProcess.HasExited) {
+      Stop-Process -Id $backendProcess.Id -ErrorAction SilentlyContinue
+      Wait-Process -Id $backendProcess.Id -Timeout 10 -ErrorAction SilentlyContinue
+    }
+    $backendProcess.Refresh()
+    if (-not $backendProcess.HasExited) {
+      $cleanupFailures += 'The specific isolated backend process is still running'
+    }
+  }
+  if (Test-Path Env:POLYSERVICE_AI_KEY) {
+    $cleanupFailures += 'Provider key remains in the current process environment'
+  }
+  if ($cleanupFailures.Count -gt 0) {
+    throw ($cleanupFailures -join '; ')
+  }
 }
 ```
 
-No imprimir la variable, inspeccionar el environment del proceso hijo ni redirigirlo a un
-archivo. Confirmar que `GET http://localhost:3000/api/stats` responde antes de continuar.
-
-### 2. Crear la sesión de prueba sin mostrar la cookie
-
-Usar una cuenta que exista solo en el SQL aislado. `WebRequestSession` conserva la cookie
-httpOnly en memoria y evita copiarla a la terminal:
-
-```powershell
-$testSession = New-Object Microsoft.PowerShell.Commands.WebRequestSession
-$loginBody = @{ email = '<test-email>'; password = '<test-password>' } | ConvertTo-Json
-$null = Invoke-RestMethod -Method Post -Uri 'http://localhost:3000/api/auth/login' `
-  -ContentType 'application/json' -Body $loginBody -WebSession $testSession
-```
-
-### 3. Enviar exactamente una solicitud al proveedor
-
-Hacer una sola llamada a `/api/ai/chat`, con un único mensaje no sensible y
-`maxTokens: 64`. Conservar la respuesta solo en memoria y producir únicamente verificaciones
-booleanas; no imprimir ni guardar el contenido del asistente:
-
-```powershell
-$chatBody = @{
-  messages = @(@{ role = 'user'; content = '<non-sensitive-test-message>' })
-  maxTokens = 64
-} | ConvertTo-Json -Depth 4
-$chatResult = Invoke-RestMethod -Method Post -Uri 'http://localhost:3000/api/ai/chat' `
-  -ContentType 'application/json' -Body $chatBody -WebSession $testSession
-
-$checks = [ordered]@{
-  FixedModel = $chatResult.model -eq 'llama-8b-nvidia'
-  AssistantRole = $chatResult.message.role -eq 'assistant'
-  AssistantContentNonEmpty = -not [string]::IsNullOrWhiteSpace([string]$chatResult.message.content)
-  PromptUsagePresent = $null -ne $chatResult.usage.promptTokens -and $chatResult.usage.promptTokens -ge 0
-  CompletionUsagePresent = $null -ne $chatResult.usage.completionTokens -and $chatResult.usage.completionTokens -ge 0
-  TotalUsageConsistent = $chatResult.usage.totalTokens -eq `
-    ($chatResult.usage.promptTokens + $chatResult.usage.completionTokens)
-}
-if ($checks.Values -contains $false) { throw 'Controlled AI response verification failed' }
-$checks
-```
-
-### 4. Verificar la fila SQL sin contenido
-
-En el SQL aislado, consultar la fila más reciente del usuario de prueba creada después de
-iniciar el test:
-
-```sql
-SELECT TOP (1)
-    RequestId, UserId, ReservedAt, CompletedAt, State,
-    ProviderStatus, LatencyMs, PromptTokens, CompletionTokens, TotalTokens
-FROM dbo.AiRequests
-WHERE UserId = <test-user-id>
-  AND ReservedAt >= <test-start-utc>
-ORDER BY ReservedAt DESC;
-```
-
-Verificar `State = 'completed'`, `ProviderStatus = 200`, timestamps presentes, latencia no
-negativa y los mismos tres conteos de tokens. La tabla no debe tener columnas ni valores de
-prompt/respuesta; no añadirlos al query, captura o reporte.
-
-### 5. Limpiar siempre
-
-Después de verificar —o en un bloque `finally` si algo falla— borrar las referencias en
-memoria, detener únicamente el backend local iniciado para la prueba y volver a asegurar que
-la variable no existe en el proceso actual:
-
-```powershell
-$chatResult = $null
-$testSession = $null
-if ($backendProcess -and -not $backendProcess.HasExited) {
-  Stop-Process -Id $backendProcess.Id
-}
-Remove-Item Env:POLYSERVICE_AI_KEY -ErrorAction SilentlyContinue
-if (Test-Path Env:POLYSERVICE_AI_KEY) { throw 'Provider key cleanup failed' }
-```
-
-El reporte registra solamente el resultado de las comprobaciones, status/metadatos y la
-limpieza; nunca la clave, el mensaje de prueba ni el contenido del asistente.
+El `finally` usa exclusivamente `$backendProcess.Id`: no mata procesos por nombre ni afecta
+otras instancias. Espera hasta 10 segundos y confirma `HasExited`; también borra y comprueba
+la ausencia de `POLYSERVICE_AI_KEY` aunque fallen login, proveedor, validación o SQL. El
+reporte registra solo los booleanos, status/metadatos y resultado de limpieza; nunca la clave,
+cookie, mensaje de prueba ni contenido del asistente.
 
 ## Publicación segura
 
