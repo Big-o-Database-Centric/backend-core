@@ -76,7 +76,7 @@ BEGIN
         BEGIN
             SELECT CAST(0 AS BIT) AS Success, 'Email already registered' AS Message, CAST(NULL AS INT) AS UserId;
             RETURN;
-        END
+        END;
         THROW;
     END CATCH
 END
