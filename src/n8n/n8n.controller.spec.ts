@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { UnauthorizedException } from '@nestjs/common';
+import type { Request } from 'express';
 import { N8nController } from './n8n.controller';
 import { N8nService } from './n8n.service';
 import { UserService } from '../user/user.service';
@@ -24,6 +25,10 @@ describe('N8nController', () => {
     controller = module.get(N8nController);
   });
 
+  const createMockReq = (cookies: Record<string, string>): Request => ({
+    cookies,
+  } as unknown as Request);
+
   it('returns N8N credential link when user is authenticated', async () => {
     userService.getMe.mockResolvedValue({
       Success: true,
@@ -38,7 +43,7 @@ describe('N8nController', () => {
       credential: 'https://n8n.example.com/signup?inviterId=...&inviteeId=...',
     });
 
-    const req = { cookies: { session_token: 'valid-token' } } as any;
+    const req = createMockReq({ session_token: 'valid-token' });
 
     const result = await controller.provision(req);
 
@@ -50,7 +55,7 @@ describe('N8nController', () => {
   it('throws UnauthorizedException when session is invalid', async () => {
     userService.getMe.mockResolvedValue({ Success: false, UserId: null, Name: null, Email: null });
 
-    const req = { cookies: { session_token: 'invalid-token' } } as any;
+    const req = createMockReq({ session_token: 'invalid-token' });
 
     await expect(controller.provision(req)).rejects.toThrow(UnauthorizedException);
     expect(n8nService.provisionAccount).not.toHaveBeenCalled();
@@ -59,7 +64,7 @@ describe('N8nController', () => {
   it('throws UnauthorizedException when no session cookie', async () => {
     userService.getMe.mockResolvedValue({ Success: false, UserId: null, Name: null, Email: null });
 
-    const req = { cookies: {} } as any;
+    const req = createMockReq({});
 
     await expect(controller.provision(req)).rejects.toThrow(UnauthorizedException);
   });

@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { N8nService } from './n8n.service';
+import { N8nService, ProvisionN8nResponse } from './n8n.service';
 import { ConfigService } from '@nestjs/config';
 
 global.fetch = jest.fn();
@@ -26,7 +26,7 @@ describe('N8nService', () => {
   });
 
   it('provisions N8N account and returns the credential link', async () => {
-    const mockResponse: any = {
+    const mockResponse: ProvisionN8nResponse = {
       account_id: 'uuid-123',
       status: 'active',
       access_type: 'invite_link',
