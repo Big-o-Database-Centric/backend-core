@@ -6,6 +6,7 @@ import { StatsModule } from './stats/stats.module';
 import { UserModule } from './user/user.module';
 import { ManagedDatabasesModule } from './managed-databases/managed-databases.module';
 import { AiModule } from './ai/ai.module';
+import { N8nModule } from './n8n/n8n.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { AiModule } from './ai/ai.module';
     UserModule,
     ManagedDatabasesModule,
     AiModule,
+    N8nModule,
   ],
 })
 export class AppModule {}
