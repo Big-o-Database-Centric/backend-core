@@ -1,13 +1,23 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { UnauthorizedException } from '@nestjs/common';
+import type { Request, Response } from 'express';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
+import { OAuthProfile } from './oauth/oauth-profile.interface';
 
-function mockResponse() {
+function mockResponse(): Response {
   return {
     cookie: jest.fn(),
     clearCookie: jest.fn(),
-  } as unknown as import('express').Response;
+    redirect: jest.fn(),
+  } as unknown as Response;
+}
+
+function mockRequest(cookies: Record<string, string> = {}, user?: OAuthProfile): Request {
+  return {
+    cookies,
+    user,
+  } as unknown as Request;
 }
 
 describe('AuthController', () => {
@@ -64,7 +74,7 @@ describe('AuthController', () => {
   it('logout invalidates the session and clears the cookie', async () => {
     authService.logout = jest.fn().mockResolvedValue(undefined);
     const res = mockResponse();
-    const req = { cookies: { session_token: 'tok-123' } } as unknown as import('express').Request;
+    const req = mockRequest({ session_token: 'tok-123' });
 
     const result = await controller.logout(req, res);
 
@@ -73,14 +83,6 @@ describe('AuthController', () => {
     expect(result).toEqual({ success: true });
   });
 });
-
-function redirectResponse() {
-  return {
-    cookie: jest.fn(),
-    clearCookie: jest.fn(),
-    redirect: jest.fn(),
-  } as unknown as import('express').Response;
-}
 
 describe('AuthController OAuth callback', () => {
   let controller: AuthController;
@@ -99,8 +101,14 @@ describe('AuthController OAuth callback', () => {
     authService.oauthLogin.mockResolvedValue({
       Success: true, Message: 'OK', UserId: 1, SessionToken: 'tok', Name: 'A', Email: 'a@x.com',
     });
-    const res = redirectResponse();
-    const req = { user: { provider: 'google', providerAccountId: 'g1', email: 'a@x.com', name: 'A', emailVerified: true } } as any;
+    const res = mockResponse();
+    const req = mockRequest({}, {
+      provider: 'google',
+      providerAccountId: 'g1',
+      email: 'a@x.com',
+      name: 'A',
+      emailVerified: true,
+    });
 
     await controller.googleCallback(req, res);
 
@@ -112,8 +120,14 @@ describe('AuthController OAuth callback', () => {
     authService.oauthLogin.mockResolvedValue({
       Success: false, Message: 'Email no verificado por el proveedor', UserId: null, SessionToken: null, Name: null, Email: null,
     });
-    const res = redirectResponse();
-    const req = { user: { provider: 'github', providerAccountId: 'h1', email: null, name: 'A', emailVerified: false } } as any;
+    const res = mockResponse();
+    const req = mockRequest({}, {
+      provider: 'github',
+      providerAccountId: 'h1',
+      email: null,
+      name: 'A',
+      emailVerified: false,
+    });
 
     await controller.githubCallback(req, res);
 

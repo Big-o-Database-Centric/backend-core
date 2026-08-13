@@ -1,15 +1,23 @@
 import { BadRequestException, ConflictException, InternalServerErrorException, UnauthorizedException } from '@nestjs/common';
 import { ManagedDatabasesService } from './managed-databases.service';
+import { CredentialCipherService } from './credential-cipher.service';
+import type { DatabaseProvisioner, ProvisionedConnection, ProvisioningInput } from './database-provisioner';
+import type { ManagedDatabaseRepository } from './managed-database.repository';
+import type { ConfigService } from '@nestjs/config';
 
 describe('ManagedDatabasesService', () => {
   const repository = {
     reserve: jest.fn(), activate: jest.fn(), fail: jest.fn(), list: jest.fn(),
     beginDelete: jest.fn(), completeDelete: jest.fn(), failDelete: jest.fn(),
   };
-  const provisioner = { engine: 'mysql' as const, provision: jest.fn(), destroy: jest.fn() };
-  const cipher = { encrypt: jest.fn().mockReturnValue(Buffer.from('encrypted')) };
-  const config = { get: jest.fn((key: string, fallback?: string) => key === 'MANAGED_DATABASE_ENABLED_ENGINES' ? 'mysql,postgresql' : fallback) };
-  const service = new (ManagedDatabasesService as any)(repository, [provisioner], cipher, config);
+  const provisioner = {
+    engine: 'mysql' as const,
+    provision: jest.fn<Promise<ProvisionedConnection>, [ProvisioningInput]>(),
+    destroy: jest.fn<Promise<void>, [string]>(),
+  };
+  const cipher = { encrypt: jest.fn().mockReturnValue(Buffer.from('encrypted')) } as unknown as CredentialCipherService;
+  const config = { get: jest.fn((key: string, fallback?: string) => key === 'MANAGED_DATABASE_ENABLED_ENGINES' ? 'mysql,postgresql' : fallback) } as unknown as ConfigService;
+  const service = new ManagedDatabasesService(repository as unknown as ManagedDatabaseRepository, [provisioner as DatabaseProvisioner], cipher, config);
 
   beforeEach(() => jest.clearAllMocks());
 

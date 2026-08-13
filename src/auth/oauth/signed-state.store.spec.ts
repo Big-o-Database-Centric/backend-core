@@ -1,15 +1,15 @@
 import { SignedStateStore } from './signed-state.store';
+import type { Request } from 'express';
 
-function fakeReqRes() {
+function fakeReqRes(): Request {
   const cookies: Record<string, string> = {};
-  const req: any = {
+  return {
     cookies,
     res: {
       cookie: (name: string, value: string) => { cookies[name] = value; },
       clearCookie: (name: string) => { delete cookies[name]; },
     },
-  };
-  return req;
+  } as unknown as Request;
 }
 
 describe('SignedStateStore', () => {
@@ -21,7 +21,7 @@ describe('SignedStateStore', () => {
       expect(storeErr).toBeNull();
       expect(typeof state).toBe('string');
 
-      store.verify(req, state as string, {}, (verifyErr: Error | null, ok?: boolean) => {
+      store.verify(req, state!, {}, (verifyErr: Error | null, ok?: boolean) => {
         expect(verifyErr).toBeNull();
         expect(ok).toBe(true);
         done();
@@ -34,7 +34,7 @@ describe('SignedStateStore', () => {
     const req = fakeReqRes();
 
     store.store(req, {}, (_e: Error | null, state?: string) => {
-      store.verify(req, (state as string) + 'x', {}, (verifyErr: Error | null, ok?: boolean) => {
+      store.verify(req, (state ?? '') + 'x', {}, (verifyErr: Error | null, ok?: boolean) => {
         expect(ok).toBe(false);
         done();
       });

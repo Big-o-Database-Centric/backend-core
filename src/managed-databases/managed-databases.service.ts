@@ -6,6 +6,7 @@ import { DATABASE_PROVISIONERS, DatabaseProvisioner } from './database-provision
 import { CreateManagedDatabaseDto } from './dto/create-managed-database.dto';
 import { MANAGED_DATABASE_REPOSITORY, ManagedDatabaseRepository } from './managed-database.repository';
 import { ManagedEngine } from './managed-database.types';
+import type { UserDatabaseRow } from '../user/user.service';
 
 @Injectable()
 export class ManagedDatabasesService {
@@ -54,7 +55,7 @@ export class ManagedDatabasesService {
         throw new Error('Reservation was not active');
       }
       return { databaseId: reservation.DatabaseId, databaseName: dto.databaseName, engine: dto.engine, ...connection, password, quotaBytes: 20971520 };
-    } catch (error) {
+    } catch {
       await Promise.resolve(provisioner.destroy(reservation.InstanceId)).catch(() => undefined);
       await this.repository.fail(reservation.DatabaseId, 'Provisioning failed');
       throw new InternalServerErrorException('Database provisioning failed');
@@ -63,7 +64,7 @@ export class ManagedDatabasesService {
 
   async list(sessionToken: string | null) {
     const records = await this.repository.list(sessionToken);
-    if (records.length === 1 && (records[0] as any).Success === false) throw new UnauthorizedException();
+    if (records.length === 1 && (records[0] as UserDatabaseRow).Success === false) throw new UnauthorizedException();
     return records;
   }
 

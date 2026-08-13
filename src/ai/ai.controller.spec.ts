@@ -1,5 +1,6 @@
 import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
+import type { Request } from 'express';
 import { AppModule } from '../app.module';
 import { AiController } from './ai.controller';
 import { AiService } from './ai.service';
@@ -11,6 +12,10 @@ describe('AiController', () => {
     chat: jest.fn(),
   };
   const controller = new AiController(service as unknown as AiService);
+
+  const mockReq = (cookies: Record<string, string>): Request => ({
+    cookies,
+  } as unknown as Request);
 
   beforeEach(() => jest.clearAllMocks());
 
@@ -24,9 +29,9 @@ describe('AiController', () => {
       remaining: { today: 9 },
     });
 
-    await expect(controller.capabilities({
-      cookies: { session_token: 'session-1', provider_key: 'must-not-propagate' },
-    } as any)).resolves.toEqual(expect.objectContaining({
+    await expect(controller.capabilities(
+      mockReq({ session_token: 'session-1', provider_key: 'must-not-propagate' }),
+    )).resolves.toEqual(expect.objectContaining({
       models: ['llama-8b-nvidia'],
       remaining: { today: 9 },
     }));
@@ -46,9 +51,10 @@ describe('AiController', () => {
       remaining: { today: 9 },
     });
 
-    await expect(controller.chat({
-      cookies: { session_token: 'session-1', provider_key: 'must-not-propagate' },
-    } as any, requestDto)).resolves.toEqual({
+    await expect(controller.chat(
+      mockReq({ session_token: 'session-1', provider_key: 'must-not-propagate' }),
+      requestDto,
+    )).resolves.toEqual({
       model: 'llama-8b-nvidia',
       message: { role: 'assistant', content: 'Hola' },
       usage: { promptTokens: 2, completionTokens: 1, totalTokens: 3 },
@@ -66,8 +72,8 @@ describe('AiController', () => {
       maxTokens: 256,
     };
 
-    await controller.capabilities({ cookies: {} } as any);
-    await controller.chat({} as any, requestDto);
+    await controller.capabilities(mockReq({}));
+    await controller.chat(mockReq({}), requestDto);
 
     expect(service.capabilities).toHaveBeenCalledWith(null);
     expect(service.chat).toHaveBeenCalledWith(null, requestDto);

@@ -1,6 +1,5 @@
 import { Module } from '@nestjs/common';
 import { CredentialCipherService } from './credential-cipher.service';
-import { DATABASE_PROVISIONERS } from './database-provisioner';
 import { MANAGED_DATABASE_REPOSITORY } from './managed-database.repository';
 import { ManagedDatabasesController } from './managed-databases.controller';
 import { ManagedDatabasesService } from './managed-databases.service';

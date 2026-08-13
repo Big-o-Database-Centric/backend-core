@@ -1,20 +1,26 @@
 import { MongodbProvisioner } from './mongodb.provisioner';
 import { PostgresqlProvisioner } from './postgresql.provisioner';
 import { SqlserverProvisioner } from './sqlserver.provisioner';
+import { DockerRunner } from './docker-runner';
+import type { ConfigService } from '@nestjs/config';
 
 const input = { instanceId: 'db-1', databaseName: 'shop', username: 'ada@example.com', password: 'Aa1!secret' };
 
-const createRunner = () => ({
-  prepareInstance: jest.fn().mockResolvedValue(undefined),
-  applyUserDataQuota: jest.fn().mockResolvedValue(undefined),
-  run: jest.fn().mockResolvedValue(''),
-  waitForHealthy: jest.fn().mockResolvedValue(undefined),
-  waitForCommand: jest.fn().mockResolvedValue(undefined),
-  publishedPort: jest.fn().mockResolvedValue(34601),
-  remove: jest.fn().mockResolvedValue(undefined),
-});
+const createRunner = (): DockerRunner => ({
+  run: jest.fn<Promise<string>, [string[]]>().mockResolvedValue(''),
+  remove: jest.fn<Promise<void>, [string]>().mockResolvedValue(undefined),
+  waitForHealthy: jest.fn<Promise<void>, [string]>().mockResolvedValue(undefined),
+  waitForCommand: jest.fn<Promise<void>, [string, string[]]>().mockResolvedValue(undefined),
+  publishedPort: jest.fn<Promise<number>, [string, number]>().mockResolvedValue(34601),
+  prepareInstance: jest.fn<Promise<void>, [string]>().mockResolvedValue(undefined),
+  applyUserDataQuota: jest.fn<Promise<void>, [string]>().mockResolvedValue(undefined),
+  cleanupInstance: jest.fn<Promise<void>, [string]>().mockResolvedValue(undefined),
+  runQuotaHelper: jest.fn<Promise<void>, [string, string, string]>().mockResolvedValue(undefined),
+} as unknown as DockerRunner);
 
-const config = { get: jest.fn((key, fallback) => key === 'MANAGED_DATABASE_HOST' ? 'db.example.test' : fallback) };
+const mockConfig = (): ConfigService => ({
+  get: jest.fn((key: string, fallback?: string) => key === 'MANAGED_DATABASE_HOST' ? 'db.example.test' : fallback),
+} as unknown as ConfigService);
 
 describe.each([
   ['PostgreSQL', PostgresqlProvisioner],
@@ -23,12 +29,13 @@ describe.each([
 ])('%s user-data quota', (_, Provisioner) => {
   it('applies the quota only after engine initialization', async () => {
     const runner = createRunner();
-    const provisioner = new Provisioner(runner as any, config as any);
+    const provisioner = new Provisioner(runner, mockConfig());
 
     await provisioner.provision(input);
 
     expect(runner.applyUserDataQuota).toHaveBeenCalledWith('db-1');
-    expect(runner.applyUserDataQuota.mock.invocationCallOrder[0])
-      .toBeGreaterThan(runner.waitForCommand.mock.invocationCallOrder[0]);
+    const applyOrder = (runner.applyUserDataQuota as jest.Mock).mock.invocationCallOrder[0];
+    const waitOrder = (runner.waitForCommand as jest.Mock).mock.invocationCallOrder[0];
+    expect(applyOrder).toBeGreaterThan(waitOrder);
   });
 });

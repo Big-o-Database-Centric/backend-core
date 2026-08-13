@@ -5,6 +5,12 @@ function config(): ConfigService {
   return { getOrThrow: (k: string) => `val-${k}`, get: (k: string) => `val-${k}` } as unknown as ConfigService;
 }
 
+interface GitHubProfile {
+  id: string;
+  username: string;
+  displayName: string | null;
+}
+
 describe('GitHubStrategy.validate', () => {
   afterEach(() => jest.restoreAllMocks());
 
@@ -22,7 +28,7 @@ describe('GitHubStrategy.validate', () => {
 
     await strategy.validate('access-token', 'refresh', {
       id: '99', username: 'ada', displayName: 'Ada L',
-    } as any, done);
+    } as GitHubProfile, done);
 
     expect(done).toHaveBeenCalledWith(null, {
       provider: 'github',
@@ -42,7 +48,7 @@ describe('GitHubStrategy.validate', () => {
     const strategy = new GitHubStrategy(config());
     const done = jest.fn();
 
-    await strategy.validate('t', 'r', { id: '99', username: 'ada', displayName: 'Ada L' } as any, done);
+    await strategy.validate('t', 'r', { id: '99', username: 'ada', displayName: 'Ada L' } as GitHubProfile, done);
 
     const arg = done.mock.calls[0][1];
     expect(arg.emailVerified).toBe(false);
@@ -56,7 +62,7 @@ describe('GitHubStrategy.validate', () => {
     const strategy = new GitHubStrategy(config());
     const done = jest.fn();
 
-    await strategy.validate('t', 'r', { id: '1', username: 'ada', displayName: null } as any, done);
+    await strategy.validate('t', 'r', { id: '1', username: 'ada', displayName: null } as GitHubProfile, done);
 
     expect(done.mock.calls[0][1].name).toBe('ada');
   });
@@ -66,7 +72,7 @@ describe('GitHubStrategy.validate', () => {
     const strategy = new GitHubStrategy(config());
     const done = jest.fn();
 
-    await strategy.validate('t', 'r', { id: '99', username: 'ada', displayName: 'Ada L' } as any, done);
+    await strategy.validate('t', 'r', { id: '99', username: 'ada', displayName: 'Ada L' } as GitHubProfile, done);
 
     const arg = done.mock.calls[0][1];
     expect(arg.email).toBeNull();
@@ -81,7 +87,7 @@ describe('GitHubStrategy.validate', () => {
     const strategy = new GitHubStrategy(config());
     const done = jest.fn();
 
-    await strategy.validate('t', 'r', { id: '99', username: 'ada', displayName: 'Ada L' } as any, done);
+    await strategy.validate('t', 'r', { id: '99', username: 'ada', displayName: 'Ada L' } as GitHubProfile, done);
 
     const arg = done.mock.calls[0][1];
     expect(arg.email).toBeNull();
@@ -99,7 +105,7 @@ describe('GitHubStrategy.validate', () => {
     const strategy = new GitHubStrategy(config());
     const done = jest.fn();
 
-    await strategy.validate('t', 'r', { id: '99', username: 'ada', displayName: 'Ada L' } as any, done);
+    await strategy.validate('t', 'r', { id: '99', username: 'ada', displayName: 'Ada L' } as GitHubProfile, done);
 
     const arg = done.mock.calls[0][1];
     expect(arg.email).toBeNull();

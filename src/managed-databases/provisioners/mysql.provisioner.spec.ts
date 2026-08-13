@@ -1,20 +1,28 @@
 import { MysqlProvisioner } from './mysql.provisioner';
+import { DockerRunner } from './docker-runner';
+import type { ConfigService } from '@nestjs/config';
 
 describe('MysqlProvisioner', () => {
+  const mockRunner = (): DockerRunner => ({
+    run: jest.fn().mockResolvedValue(''),
+    remove: jest.fn().mockResolvedValue(undefined),
+    waitForHealthy: jest.fn().mockResolvedValue(undefined),
+    waitForCommand: jest.fn().mockResolvedValue(undefined),
+    publishedPort: jest.fn().mockResolvedValue(34601),
+    prepareInstance: jest.fn().mockResolvedValue(undefined),
+    applyUserDataQuota: jest.fn().mockResolvedValue(undefined),
+    cleanupInstance: jest.fn().mockResolvedValue(undefined),
+    runQuotaHelper: jest.fn().mockResolvedValue(undefined),
+  } as unknown as DockerRunner);
+
+  const mockConfig = (host = 'db.example.test'): ConfigService => ({
+    get: jest.fn((key: string, fallback?: string) => key === 'MANAGED_DATABASE_HOST' ? host : fallback),
+  } as unknown as ConfigService);
+
   it('waits until MySQL accepts connections before returning credentials', async () => {
-    const runner = {
-      prepareQuota: jest.fn().mockResolvedValue(undefined),
-      prepareInstance: jest.fn().mockResolvedValue(undefined),
-      applyUserDataQuota: jest.fn().mockResolvedValue(undefined),
-      cleanupInstance: jest.fn().mockResolvedValue(undefined),
-      run: jest.fn().mockResolvedValue(''),
-      waitForHealthy: jest.fn().mockResolvedValue(undefined),
-      waitForCommand: jest.fn().mockResolvedValue(undefined),
-      publishedPort: jest.fn().mockResolvedValue(34601),
-      remove: jest.fn().mockResolvedValue(undefined),
-    };
-    const config = { get: jest.fn((key, fallback) => key === 'MANAGED_DATABASE_HOST' ? 'db.example.test' : fallback) };
-    const provisioner = new MysqlProvisioner(runner as any, config as any);
+    const runner = mockRunner();
+    const config = mockConfig();
+    const provisioner = new MysqlProvisioner(runner, config);
 
     const result = await provisioner.provision({
       instanceId: 'db-1', databaseName: 'shop', username: 'ada@example.com', password: 'secret',
@@ -26,16 +34,22 @@ describe('MysqlProvisioner', () => {
     );
     expect(runner.prepareInstance).toHaveBeenCalledWith('db-1');
     expect(runner.applyUserDataQuota).toHaveBeenCalledWith('db-1');
-    expect(runner.applyUserDataQuota.mock.invocationCallOrder[0])
-      .toBeGreaterThan(runner.waitForCommand.mock.invocationCallOrder[0]);
+    const applyOrder = (runner.applyUserDataQuota as jest.Mock).mock.invocationCallOrder[0];
+    const waitOrder = (runner.waitForCommand as jest.Mock).mock.invocationCallOrder[0];
+    expect(applyOrder).toBeGreaterThan(waitOrder);
     expect(runner.run).toHaveBeenCalledWith(expect.arrayContaining(['run', '--publish', '3306']));
     expect(result).toEqual({ host: 'db.example.test', port: 34601, username: 'ada@example.com' });
   });
 
   it('refuses to create a database when no public host is configured', async () => {
-    const runner = { prepareInstance: jest.fn(), run: jest.fn(), waitForHealthy: jest.fn(), publishedPort: jest.fn() };
-    const config = { get: jest.fn((_, fallback) => fallback) };
-    const provisioner = new MysqlProvisioner(runner as any, config as any);
+    const runner = {
+      prepareInstance: jest.fn(),
+      run: jest.fn(),
+      waitForHealthy: jest.fn(),
+      publishedPort: jest.fn(),
+    } as unknown as DockerRunner;
+    const config = mockConfig('');
+    const provisioner = new MysqlProvisioner(runner, config);
 
     await expect(provisioner.provision({ instanceId: 'db-1', databaseName: 'shop', username: 'ada@example.com', password: 'secret' }))
       .rejects.toThrow('MANAGED_DATABASE_HOST must be configured');
@@ -53,9 +67,9 @@ describe('MysqlProvisioner', () => {
       waitForHealthy: jest.fn().mockResolvedValue(undefined),
       waitForCommand: jest.fn().mockResolvedValue(undefined),
       publishedPort: jest.fn().mockResolvedValue(34601),
-    };
-    const config = { get: jest.fn((key, fallback) => key === 'MANAGED_DATABASE_HOST' ? 'db.example.test' : fallback) };
-    const provisioner = new MysqlProvisioner(runner as any, config as any);
+    } as unknown as DockerRunner;
+    const config = mockConfig();
+    const provisioner = new MysqlProvisioner(runner, config);
 
     await provisioner.provision({ instanceId: 'db-1', databaseName: 'shop', username: 'ada@example.com', password: 'secret' });
 
@@ -66,9 +80,9 @@ describe('MysqlProvisioner', () => {
     const runner = {
       remove: jest.fn().mockResolvedValue(undefined),
       cleanupInstance: jest.fn().mockResolvedValue(undefined),
-    };
-    const config = { get: jest.fn((_, fallback) => fallback) };
-    const provisioner = new MysqlProvisioner(runner as any, config as any);
+    } as unknown as DockerRunner;
+    const config = mockConfig('');
+    const provisioner = new MysqlProvisioner(runner, config);
 
     await provisioner.destroy('db-1');
 
