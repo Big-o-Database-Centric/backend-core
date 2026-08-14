@@ -6,14 +6,14 @@ global.fetch = jest.fn();
 
 describe('N8nService', () => {
   let service: N8nService;
-  let configService: { getOrThrow: jest.Mock };
+  let configService: { get: jest.Mock };
 
   beforeEach(async () => {
-    configService = { getOrThrow: jest.fn() };
-    configService.getOrThrow.mockImplementation((key: string) => {
+    configService = { get: jest.fn() };
+    configService.get.mockImplementation((key: string) => {
       if (key === 'N8N_BASE_URL') return 'https://api.snapshot.andrescortes.dev';
       if (key === 'N8N_API_KEY') return 'test-api-key';
-      throw new Error(`Missing config: ${key}`);
+      return undefined;
     });
 
     (global.fetch as jest.Mock).mockReset();
@@ -70,5 +70,22 @@ describe('N8nService', () => {
     (global.fetch as jest.Mock).mockRejectedValue(new Error('Network error'));
 
     await expect(service.provisionAccount(42, 'user@example.com')).rejects.toThrow('Network error');
+  });
+
+  it('throws when N8N is not configured', async () => {
+    configService.get.mockImplementation((key: string) => {
+      if (key === 'N8N_BASE_URL') return 'https://api.snapshot.andrescortes.dev';
+      return undefined;
+    });
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [N8nService, { provide: ConfigService, useValue: configService }],
+    }).compile();
+
+    const unconfigured = module.get(N8nService);
+
+    await expect(unconfigured.provisionAccount(42, 'user@example.com')).rejects.toThrow(
+      'N8N provisioning is not configured',
+    );
   });
 });

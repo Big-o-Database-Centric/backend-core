@@ -1,4 +1,4 @@
-import { Injectable, InternalServerErrorException } from '@nestjs/common';
+import { Injectable, InternalServerErrorException, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 export interface ProvisionN8nRequest {
@@ -13,17 +13,23 @@ export interface ProvisionN8nResponse {
   credential: string;
 }
 
+const DEFAULT_N8N_BASE_URL = 'https://api.snapshot.andrescortes.dev';
+
 @Injectable()
 export class N8nService {
   private readonly baseUrl: string;
-  private readonly apiKey: string;
+  private readonly apiKey: string | undefined;
 
   constructor(private readonly config: ConfigService) {
-    this.baseUrl = this.config.getOrThrow<string>('N8N_BASE_URL').replace(/\/$/, '');
-    this.apiKey = this.config.getOrThrow<string>('N8N_API_KEY');
+    this.baseUrl = (this.config.get<string>('N8N_BASE_URL') ?? DEFAULT_N8N_BASE_URL).replace(/\/$/, '');
+    this.apiKey = this.config.get<string>('N8N_API_KEY')?.trim() || undefined;
   }
 
   async provisionAccount(userId: number, email: string): Promise<ProvisionN8nResponse> {
+    if (!this.apiKey) {
+      throw new ServiceUnavailableException('N8N provisioning is not configured');
+    }
+
     const body: ProvisionN8nRequest = {
       external_user_ref: String(userId),
       email,
