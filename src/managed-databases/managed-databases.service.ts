@@ -1,0 +1,106 @@
+import { BadRequestException, ConflictException, Inject, Injectable, InternalServerErrorException, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { randomBytes } from 'node:crypto';
+import { CredentialCipherService } from './credential-cipher.service';
+import { DATABASE_PROVISIONERS, DatabaseProvisioner } from './database-provisioner';
+import { CreateManagedDatabaseDto } from './dto/create-managed-database.dto';
+import { MANAGED_DATABASE_REPOSITORY, ManagedDatabaseRepository } from './managed-database.repository';
+import { ManagedEngine } from './managed-database.types';
+import type { UserDatabaseRow } from '../user/user.service';
+
+@Injectable()
+export class ManagedDatabasesService {
+  private readonly byEngine: Map<ManagedEngine, DatabaseProvisioner>;
+
+  constructor(
+    @Inject(MANAGED_DATABASE_REPOSITORY) private readonly repository: ManagedDatabaseRepository,
+    @Inject(DATABASE_PROVISIONERS) provisioners: DatabaseProvisioner[],
+    private readonly cipher: CredentialCipherService,
+    private readonly config: ConfigService,
+  ) {
+    this.byEngine = new Map(provisioners.map((provisioner) => [provisioner.engine, provisioner]));
+  }
+
+  async create(sessionToken: string | null, dto: CreateManagedDatabaseDto) {
+    if (!this.enabledEngines().includes(dto.engine)) throw new ConflictException('Database engine is unavailable');
+
+    const reservation = await this.repository.reserve(sessionToken, dto.databaseName, dto.engine);
+    if (!reservation?.Success) {
+      if (reservation?.Message === 'Unauthorized') throw new UnauthorizedException();
+      throw new ConflictException(reservation?.Message ?? 'Unable to reserve database');
+    }
+
+    const provisioner = this.byEngine.get(dto.engine);
+    if (!provisioner || !reservation.DatabaseId || !reservation.InstanceId || !reservation.Email) {
+      if (reservation?.DatabaseId) await this.repository.fail(reservation.DatabaseId, 'Provisioner unavailable');
+      throw new InternalServerErrorException('Database engine is unavailable');
+    }
+
+    if (reservation.Email.length > 32) {
+      await this.repository.fail(reservation.DatabaseId, 'Email is too long for a database username');
+      throw new BadRequestException('Email is too long to use as a database username');
+    }
+
+    const username = reservation.Email;
+    const password = `Aa1!${randomBytes(24).toString('base64url')}`;
+    try {
+      const connection = await provisioner.provision({
+        instanceId: reservation.InstanceId,
+        databaseName: dto.databaseName,
+        username,
+        password,
+      });
+      const activated = await this.repository.activate(reservation.DatabaseId, connection, this.cipher.encrypt(password));
+      if (!activated) {
+        throw new Error('Reservation was not active');
+      }
+      return { databaseId: reservation.DatabaseId, databaseName: dto.databaseName, engine: dto.engine, ...connection, password, quotaBytes: 20971520 };
+    } catch {
+      await Promise.resolve(provisioner.destroy(reservation.InstanceId)).catch(() => undefined);
+      await this.repository.fail(reservation.DatabaseId, 'Provisioning failed');
+      throw new InternalServerErrorException('Database provisioning failed');
+    }
+  }
+
+  async list(sessionToken: string | null) {
+    const records = await this.repository.list(sessionToken);
+    if (records.length === 1 && (records[0] as UserDatabaseRow).Success === false) throw new UnauthorizedException();
+    return records;
+  }
+
+  async remove(sessionToken: string | null, databaseId: number) {
+    const reservation = await this.repository.beginDelete(sessionToken, databaseId);
+    if (!reservation?.Success) {
+      if (reservation?.Message === 'Unauthorized') throw new UnauthorizedException();
+      throw new NotFoundException('Database not found');
+    }
+
+    const provisioner = reservation.Engine ? this.byEngine.get(reservation.Engine) : undefined;
+    if (!provisioner || !reservation.DatabaseId || !reservation.InstanceId) {
+      if (reservation?.DatabaseId) await this.repository.failDelete(reservation.DatabaseId, 'Deletion failed');
+      throw new InternalServerErrorException('Database deletion failed');
+    }
+
+    try {
+      await provisioner.destroy(reservation.InstanceId);
+      const deleted = await this.repository.completeDelete(reservation.DatabaseId);
+      if (!deleted) throw new Error('Database deletion was not completed');
+      return { databaseId: reservation.DatabaseId, deleted: true };
+    } catch {
+      await Promise.resolve(this.repository.failDelete(reservation.DatabaseId, 'Deletion failed')).catch(() => undefined);
+      throw new InternalServerErrorException('Database deletion failed');
+    }
+  }
+
+  capabilities() {
+    return { engines: this.enabledEngines(), maxPerUser: 3 };
+  }
+
+  private enabledEngines(): ManagedEngine[] {
+    const supported: ManagedEngine[] = ['mysql', 'postgresql', 'mongodb', 'sqlserver'];
+    const configured = this.config.get<string>('MANAGED_DATABASE_ENABLED_ENGINES', 'mysql,postgresql')
+      .split(',')
+      .map((engine) => engine.trim());
+    return supported.filter((engine) => configured.includes(engine));
+  }
+}

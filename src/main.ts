@@ -1,30 +1,22 @@
+import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
-import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
-import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
-import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import cookieParser from 'cookie-parser';
+import { AppModule } from './app.module';
+import { AllExceptionsFilter } from './common/all-exceptions.filter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  // Swagger Docs Setup
-  const config = new DocumentBuilder()
-    .setTitle('BigO API')
-    .setDescription('API documentation')
-    .setVersion('1.0')
-    .build();
-
-  const document = SwaggerModule.createDocument(app, config);
-
-  SwaggerModule.setup('api', app, document);
-
-  // Global Pipe
+  app.use(cookieParser());
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
-  // Pipes are executed when Nest already knows what is the controller. It is different to Middlewares
-
-  // Global Filters
-  app.useGlobalFilters(new GlobalExceptionFilter());
+  app.useGlobalFilters(new AllExceptionsFilter());
+  app.enableCors({
+    origin: process.env.CORS_ORIGIN ?? 'https://big-o.andrescortes.dev',
+    credentials: true,
+  });
 
   await app.listen(process.env.PORT ?? 3000);
 }
-void bootstrap();
+
+bootstrap();

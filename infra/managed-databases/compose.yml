@@ -1,0 +1,16 @@
+services:
+  backend-core:
+    image: big-o-backend-core:latest
+    environment:
+      MANAGED_DATABASE_DATA_ROOT: /srv/big-o/instances
+      MANAGED_DATABASE_HOST: db.example.com
+      MANAGED_DATABASE_QUOTA_HELPER_IMAGE: big-o-managed-quota-helper:latest
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - big-o-private
+
+networks:
+  big-o-private:
+    name: big-o-private
+    internal: true
